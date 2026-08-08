@@ -134,9 +134,7 @@ def write_png(path: pathlib.Path, size: int, raw: bytes) -> None:
 
 
 def main() -> None:
-    target = pathlib.Path(
-        sys.argv[1] if len(sys.argv) > 1 else "custom_components/bilresa_remote"
-    )
+    target = pathlib.Path(sys.argv[1] if len(sys.argv) > 1 else "custom_components/bilresa_remote")
     target.mkdir(parents=True, exist_ok=True)
     write_png(target / "icon.png", 256, render(256))
     write_png(target / "icon@2x.png", 512, render(512))
