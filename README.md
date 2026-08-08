@@ -27,9 +27,11 @@ own action sequence.
   `wheel_down`) and the mode, level and channel as attributes.
 - Adds a writable `select` for the active mode, a "Next mode" button and two
   diagnostic sensors (last action, wheel level).
-- Lets you bind an action sequence to every (mode, press) combination in the
-  UI, using the same action editor as the automation editor. Sequences run as
-  Home Assistant scripts, with visible traces.
+- Lets you bind an action sequence to every (mode, press) combination in its own
+  sidebar panel, using the same action editor as the automation editor.
+  Sequences run as Home Assistant scripts, with visible traces.
+- Shows every press live while you configure, so you can see which slot a press
+  lands in instead of guessing.
 - Normalises the protocol quirks: the wheel level is absolute and its ZCL
   "non value" (`null`) is mapped to 255, the first level after a restart only
   calibrates instead of firing, and fast turns are throttled with a guaranteed
@@ -90,23 +92,62 @@ mode that works without them.
 
 ## Setup
 
-The setup is a guided flow; there is nothing to write into `configuration.yaml`.
+Everything except the very first question happens in the integration's own
+panel. There is nothing to write into `configuration.yaml`.
 
-1. The first step checks that MQTT is available and asks for the Zigbee2MQTT
-   base topic (`zigbee2mqtt` unless you changed it).
-2. The tutorial step explains — with pictures — how the remote works, what the
-   lower button does, and how to unlock the second and third channel if you want
-   them. Read it once; it answers most questions this README raises.
-3. Then you add one remote at a time. The device list is read from the retained
-   `zigbee2mqtt/bridge/devices` topic, so you pick your remote by its friendly
-   name instead of typing an IEEE address.
-4. Per remote you choose the mode source and the mode names, and then bind
-   actions per mode.
+### 1. Add the integration once
 
-To change anything later: **Configure** on the integration card, or the
-three-dot menu on a remote → **Reconfigure**. Editing an action mapping does not
-reload the integration; only structural changes (adding or removing a remote,
-changing the base topic) do.
+**Settings → Devices & services → Add integration → IKEA BILRESA Remote.**
+
+The flow checks that MQTT is available and asks for the Zigbee2MQTT base topic
+(`zigbee2mqtt` unless you changed it). That is all it does — the base topic is
+the one setting the integration needs before it can listen to anything. You can
+change it later under **Configure** on the integration card.
+
+### 2. Open the BILRESA panel
+
+After setup a **BILRESA** entry appears in the sidebar (visible to
+administrators, reachable at `/bilresa`). This is where remotes, modes and
+actions are configured.
+
+<!-- Screenshot placeholder:
+     docs/images/panel-overview.png — the overview with two remotes and the live
+     strip, docs/images/panel-remote.png — one remote with its mode/action grid.
+     Take both at a viewport width of ~1200 px in the default light theme and
+     replace this comment with the <img> tags. -->
+
+What you do there:
+
+- **Overview.** Every configured remote as a card: housing colour, active
+  channel, how many action slots are filled. The refresh button re-reads the
+  Zigbee2MQTT device list.
+- **Add a remote.** The list comes from the retained
+  `zigbee2mqtt/bridge/devices` topic, so you pick your remote by its friendly
+  name or its Zigbee2MQTT comment instead of typing an IEEE address. Remotes
+  that are already set up are marked as such. If Zigbee2MQTT is unreachable you
+  can still enter an IEEE address by hand.
+- **Configure a remote.** Name, colour, mode source, number of modes and mode
+  names, whether the single click is split into on/off, whether double and
+  triple click are mode-independent, the wheel throttle and the action that
+  cycles the mode.
+- **Bind actions.** One slot per mode and press. The editor is the same action
+  editor the automation editor uses, and every slot has a test button that runs
+  the stored sequence once.
+- **Watch presses live.** While the panel is open, every press appears in the
+  strip below the header with its mode and level, and the slot it belongs to is
+  highlighted. That is the fastest way to find out which slot a press actually
+  lands in.
+- **Read the guide.** The illustrated manual — button reference, the Touchlink
+  unlock, the multiclick limitation, troubleshooting — opens from the guide
+  button in the panel's top bar.
+
+Saving is immediate and local: the integration rebuilds only what changed and
+does not reload itself for an edited mapping or setting. Adding or removing a
+remote and changing the base topic are the structural changes that do.
+
+The per-remote config flow dialogs still exist for anyone who prefers them
+(three-dot menu on a remote → **Reconfigure**), but the panel is the primary
+interface and gets new features first.
 
 ## Button reference
 
@@ -157,10 +198,9 @@ does nothing at all. That is the state most remotes are in.
 groups, all modes usable. The unlock is only worth it if you want the lower
 button on the remote itself to switch modes.
 
-If you do want it, the full illustrated walkthrough lives in the setup wizard:
-**Settings → Devices & services → IKEA BILRESA Remote → Configure → Setup
-guide**. It stays reachable after setup, so you can come back to it at any time.
-The short version:
+If you do want it, the full illustrated walkthrough lives in the panel: sidebar
+**BILRESA** → the guide button in the top bar. It is reachable at any time, and
+it names the group ids your remotes actually use. The short version:
 
 1. **Touchlink each channel against a dummy Zigbee device.** Hold the remote next
    to a bulb you can safely play with and press the pairing button 4× quickly.
@@ -363,6 +403,10 @@ Bug reports, protocol measurements and translations are all welcome. See
 [CONTRIBUTING.md](CONTRIBUTING.md). Measurements beat documentation in this
 project — if your hardware disagrees with the table above, that is a finding,
 not a mistake.
+
+The panel is plain ES2022 without a build step; how its modules fit together,
+which rules the websocket contract imposes and how to get around the browser
+cache while developing is written down in [docs/PANEL.md](docs/PANEL.md).
 
 ## License and trademarks
 

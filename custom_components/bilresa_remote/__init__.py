@@ -65,6 +65,8 @@ from .coordinator import (
 )
 from .dispatcher import BilresaDispatcher, remote_ieee, remote_name, remote_subentries
 from .mode import BilresaModeStore, ModeResolver, async_get_mode_store
+from .panel import async_register_panel, async_unregister_panel
+from .websocket import async_register_websocket_api
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -180,7 +182,7 @@ async def async_register_images(hass: HomeAssistant) -> None:
         return
     hass.data[_IMAGES_REGISTERED] = True
 
-    if not IMAGE_DIR.is_dir():
+    if not await hass.async_add_executor_job(IMAGE_DIR.is_dir):
         _LOGGER.warning("Image directory %s is missing, illustrations disabled", IMAGE_DIR)
         return
 
@@ -211,6 +213,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: BilresaConfigEntry) -> b
     """Set up the BILRESA integration from its config entry."""
     await async_register_images(hass)
     _async_register_services(hass)
+    async_register_websocket_api(hass)
+    await async_register_panel(hass)
 
     if not await mqtt.async_wait_for_mqtt_client(hass):
         # Not an error: MQTT may simply still be starting up.
@@ -286,6 +290,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: BilresaConfigEntry) -> 
     """Unload the config entry and every subscription it owns."""
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
+        async_unregister_panel(hass)
         await _async_shutdown(getattr(entry, "runtime_data", None))
     return unloaded
 
