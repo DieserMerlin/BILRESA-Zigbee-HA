@@ -70,6 +70,7 @@ from .const import (
     DEFAULT_WHEEL_THROTTLE_MS,
     DOMAIN,
     IMAGE_PATH,
+    MODE_SOURCE_DEVICE,
     MODE_SOURCES,
     SUBENTRY_TYPE_REMOTE,
     SUPPORTED_MODELS,
@@ -355,11 +356,26 @@ def _normalise_device(raw: Any) -> dict[str, str] | None:
     if not isinstance(definition, Mapping):
         definition = {}
     model = str(raw.get("model") or definition.get("model") or "").strip()
-    description = str(raw.get("description") or definition.get("description") or "").strip()
+    # The free-text device comment in Zigbee2MQTT is where people note which
+    # physical unit this is ("Red", "Kitchen", ...). It takes precedence over the
+    # generic model description, both for the picker label and for guessing the
+    # housing colour.
+    comment = str(raw.get("description") or "").strip()
+    description = comment or str(definition.get("description") or "").strip()
     friendly_name = str(raw.get("friendly_name") or ieee).strip() or ieee
-    label = friendly_name if friendly_name == ieee else f"{friendly_name} ({ieee})"
+
+    # Zigbee2MQTT leaves friendly_name equal to the IEEE address unless the
+    # device was renamed. Without the comment, three identical remotes would show
+    # up as three indistinguishable hex strings.
+    parts: list[str] = []
+    if comment:
+        parts.append(comment)
+    if friendly_name != ieee:
+        parts.append(friendly_name)
+    parts.append(ieee)
+    label = " - ".join(parts)
     if model:
-        label = f"{label} - {model}"
+        label = f"{label} ({model})"
     return {
         "ieee": ieee,
         "friendly_name": friendly_name,
@@ -696,7 +712,12 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
         if not self._devices:
             base_topic = _entry_base_topic(self._get_entry())
             self._devices = await _async_fetch_remotes(self.hass, base_topic)
-        if not self._devices:
+
+        # Remotes that already have a subentry would only produce an
+        # "already configured" error, so keep them out of the picker entirely.
+        known = self._known_ieees()
+        available = [device for device in self._devices if device["ieee"] not in known]
+        if not available:
             return await self.async_step_manual()
 
         if user_input is not None:
@@ -708,7 +729,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             elif ieee in self._known_ieees():
                 errors[CONF_IEEE] = "already_configured"
             else:
-                device = next((item for item in self._devices if item["ieee"] == ieee), None)
+                device = next((item for item in available if item["ieee"] == ieee), None)
                 self._data[CONF_IEEE] = ieee
                 if device is not None:
                     self._data.setdefault(CONF_NAME, device["friendly_name"])
@@ -723,7 +744,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                 vol.Optional(
                     CONF_IEEE,
                     description={"suggested_value": self._data.get(CONF_IEEE)},
-                ): _device_selector(self._devices),
+                ): _device_selector(available),
                 vol.Required(CONF_MANUAL_ENTRY, default=False): _bool_selector(),
             }
         )
@@ -731,7 +752,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             step_id="user",
             data_schema=schema,
             errors=errors,
-            description_placeholders=self._placeholders(device_count=str(len(self._devices))),
+            description_placeholders=self._placeholders(device_count=str(len(available))),
         )
 
     async def async_step_manual(
@@ -858,6 +879,10 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             """Return the stored value for a field inside the advanced section."""
             return advanced_defaults.get(key, fallback)
 
+        effective_mode_source = str(
+            current(CONF_MODE_SOURCE, self._data.get(CONF_MODE_SOURCE, DEFAULT_MODE_SOURCE))
+        )
+
         stored_groups = ", ".join(
             str(item) for item in self._data.get(CONF_GROUP_IDS, DEFAULT_GROUP_IDS)
         )
@@ -886,21 +911,33 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                     default=_as_int(current(CONF_MODE_COUNT, self._mode_count), DEFAULT_MODE_COUNT),
                 ): _number_selector(1, MAX_MODE_COUNT),
                 vol.Required(
-                    CONF_MODE_CYCLE_ACTION,
-                    default=str(
-                        current(
-                            CONF_MODE_CYCLE_ACTION,
-                            self._data.get(CONF_MODE_CYCLE_ACTION, ACTION_TRIPLE),
-                        )
-                    ),
-                ): _select_selector(CYCLE_ACTIONS, "cycle_action"),
-                vol.Required(
                     CONF_MODELESS_MULTICLICK,
                     default=bool(current(CONF_MODELESS_MULTICLICK, self._modeless)),
                 ): _bool_selector(),
                 vol.Required(SECTION_ADVANCED): section(
                     vol.Schema(
                         {
+                            # Only meaningful when the integration has to advance
+                            # the mode itself. With the device mode source the
+                            # remote's lower button switches channels in hardware
+                            # and this setting would do nothing, so it is hidden.
+                            **(
+                                {
+                                    vol.Required(
+                                        CONF_MODE_CYCLE_ACTION,
+                                        default=str(
+                                            current_advanced(
+                                                CONF_MODE_CYCLE_ACTION,
+                                                self._data.get(
+                                                    CONF_MODE_CYCLE_ACTION, ACTION_TRIPLE
+                                                ),
+                                            )
+                                        ),
+                                    ): _select_selector(CYCLE_ACTIONS, "cycle_action")
+                                }
+                                if effective_mode_source != MODE_SOURCE_DEVICE
+                                else {}
+                            ),
                             vol.Required(
                                 CONF_SPLIT_SINGLE_CLICK,
                                 default=bool(

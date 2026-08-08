@@ -107,7 +107,6 @@
           "data": {
             "color": "Gehäusefarbe",
             "mode_count": "Anzahl der Modi",
-            "mode_cycle_action": "Aktion, die den Modus umschaltet",
             "mode_source": "Woher der Modus kommt",
             "modeless_multiclick": "Doppel- und Dreifachklick gelten in jedem Modus",
             "name": "Name"
@@ -115,7 +114,6 @@
           "data_description": {
             "color": "Rot, Beige oder Grün - nimm die Farbe deiner Fernbedienung.",
             "mode_count": "Die Hardware hat drei Kanäle, die interne Modusquelle ist daran aber nicht gebunden - bis zu neun Modi sind möglich.",
-            "mode_cycle_action": "Wird nur bei der internen und der hybriden Modusquelle verwendet. Diese Aktion schaltet einen Modus weiter; du kannst sie trotzdem zusätzlich belegen.",
             "mode_source": "Hybrid ist die sichere Wahl: startet mit dem internen Modus und stellt selbständig auf die Gerätekanäle um, sobald einer auftaucht. Gerätekanäle setzt die Touchlink-Freischaltung aus der Anleitung voraus. Intern funktioniert mit jeder Fernbedienung, auch mit einer fabrikneuen.",
             "modeless_multiclick": "Das ist eine Eigenschaft der Hardware, kein Geschmack. Ein Doppel- oder Dreifachklick verlässt die Fernbedienung ohne Kanalinformation - im Payload steht kein action_group, anders als bei Einfachklick oder Raddrehung. Bleibt das an, belegst du Doppel- und Dreifachklick einmal für die ganze Fernbedienung, genau so wie die Hardware es hergibt. Schaltest du es aus, bekommst du eine Belegung je Modus, auf Basis des zuletzt gesehenen Modus - bequem, aber genau einen Tastendruck lang falsch, wenn du den Kanal wechselst und sofort doppelklickst.",
             "name": "Wird auf der Geräteseite angezeigt und für die Entitätsnamen verwendet."
@@ -127,13 +125,15 @@
                 "cycle_wrap": "Nach dem letzten Modus wieder von vorn",
                 "group_ids": "Zigbee-Gruppen-IDs der Kanäle",
                 "split_single_click": "Alternierenden Einfachklick getrennt belegen",
-                "wheel_throttle_ms": "Rad-Drosselung"
+                "wheel_throttle_ms": "Rad-Drosselung",
+                "mode_cycle_action": "Aktion, die den Modus weiterschaltet"
               },
               "data_description": {
                 "cycle_wrap": "An: nach dem letzten Modus kommt wieder der erste. Aus: der Durchlauf endet beim letzten Modus.",
                 "group_ids": "Kommagetrennt, eine je Modus. Die BILRESA-Firmware benutzt 21658, 21659 und 21660. Nur ändern, wenn deine Fernbedienung wirklich etwas anderes sendet.",
                 "split_single_click": "Ein Einfachklick wechselt zwischen on und off, weil die Fernbedienung diesen Zustand selbst hält. Normalerweise lösen beide dieselbe Aktion aus. Schalte das ein, um zwei getrennte Belegungen zu bekommen - beachte, dass die Alternierung aus dem Tritt gerät, sobald etwas anderes das Licht schaltet.",
-                "wheel_throttle_ms": "Schnelles Drehen erzeugt einen Schwall von Werten. Das ist der Mindestabstand zwischen zwei Ausführungen; der letzte Wert wird immer zugestellt, das Licht bleibt also nie auf halbem Weg stehen."
+                "wheel_throttle_ms": "Schnelles Drehen erzeugt einen Schwall von Werten. Das ist der Mindestabstand zwischen zwei Ausführungen; der letzte Wert wird immer zugestellt, das Licht bleibt also nie auf halbem Weg stehen.",
+                "mode_cycle_action": "Wird nur gebraucht, wenn die Integration den Modus selbst umschalten muss, also bei der Modusquelle Intern (und bei Hybrid, solange keine Gerätekanäle erkannt wurden). Bei der Modusquelle Gerät schaltet die untere Taste der Fernbedienung den Kanal in Hardware um, und diese Einstellung bleibt wirkungslos - deshalb wird sie dann gar nicht angezeigt."
               },
               "description": "Sinnvolle Voreinstellungen. Nur anfassen, wenn du weißt warum.",
               "name": "Fortgeschritten"

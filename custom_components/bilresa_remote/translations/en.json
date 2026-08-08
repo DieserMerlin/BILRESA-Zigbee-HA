@@ -107,7 +107,6 @@
           "data": {
             "color": "Housing colour",
             "mode_count": "Number of modes",
-            "mode_cycle_action": "Action that switches modes",
             "mode_source": "Where the mode comes from",
             "modeless_multiclick": "Double and triple click work in every mode",
             "name": "Name"
@@ -115,7 +114,6 @@
           "data_description": {
             "color": "Red, beige or green - pick whichever matches your remote.",
             "mode_count": "The hardware has three channels, but the internal mode source is not bound by that - up to nine modes are possible.",
-            "mode_cycle_action": "Only used with the internal and hybrid mode source. This action advances to the next mode; you can still bind it to actions as well.",
             "mode_source": "Hybrid is the safe choice: it starts with the internal mode and switches to the device channels on its own as soon as it sees one. Device needs the Touchlink unlock from the setup guide. Internal works on any remote, even a fresh one.",
             "modeless_multiclick": "This is a hardware fact, not a preference. A double or triple click leaves the remote without the channel information - there is no action_group in the payload, unlike a single click or a wheel turn. Keep this on and you assign double and triple click once for the whole remote, which is exactly what the hardware supports. Turn it off and you get one assignment per mode, based on the last mode the integration saw - convenient, but wrong for one press if you switch the channel and double click straight away.",
             "name": "Shown on the device page and used for the entity names."
@@ -127,13 +125,15 @@
                 "cycle_wrap": "Wrap around after the last mode",
                 "group_ids": "Zigbee group IDs of the channels",
                 "split_single_click": "Assign the alternating single click separately",
-                "wheel_throttle_ms": "Wheel throttle"
+                "wheel_throttle_ms": "Wheel throttle",
+                "mode_cycle_action": "Action that advances the mode"
               },
               "data_description": {
                 "cycle_wrap": "On: the last mode is followed by the first one again. Off: the cycle stops at the last mode.",
                 "group_ids": "Comma separated, one per mode. The BILRESA firmware uses 21658, 21659 and 21660. Only change this if your remote really sends something else.",
                 "split_single_click": "A single click alternates between on and off, because the remote keeps that state itself. Normally both run the same action. Switch this on to get two separate assignments - be aware that the alternation drifts as soon as something else switches the light.",
-                "wheel_throttle_ms": "A fast spin produces a burst of values. This is the minimum gap between two runs; the final value is always delivered, so the light never gets stuck halfway."
+                "wheel_throttle_ms": "A fast spin produces a burst of values. This is the minimum gap between two runs; the final value is always delivered, so the light never gets stuck halfway.",
+                "mode_cycle_action": "Only used when the integration has to switch modes itself, i.e. with the internal mode source (and with hybrid until device channels are detected). With the device mode source the lower button on the remote switches the channel in hardware and this setting is ignored - which is why it is not shown then."
               },
               "description": "Sensible defaults. Only touch these if you know why.",
               "name": "Advanced"
