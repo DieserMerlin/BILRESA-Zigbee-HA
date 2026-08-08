@@ -80,9 +80,7 @@ class BilresaModeSelect(BilresaRemoteEntity, SelectEntity, RestoreEntity):
             self.async_write_ha_state()
             # The select is the authority across restarts; seed the resolver
             # with what we restored.
-            await async_request_mode(
-                self.hass, self._entry, self._subentry_id, self._mode
-            )
+            await async_request_mode(self.hass, self._entry, self._subentry_id, self._mode)
             return
 
         # Nothing usable to restore -- a first start, or the mode was renamed

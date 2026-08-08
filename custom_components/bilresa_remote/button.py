@@ -59,9 +59,7 @@ class BilresaNextModeButton(BilresaRemoteEntity, ButtonEntity):
         The resolver decides whether it wraps at the last mode; ``self._mode``
         only feeds the fallback used when no resolver can be reached.
         """
-        await async_request_next_mode(
-            self.hass, self._entry, self._subentry_id, self._mode
-        )
+        await async_request_next_mode(self.hass, self._entry, self._subentry_id, self._mode)
 
     @callback
     def handle_mode(self, mode: int) -> None:

@@ -40,7 +40,6 @@ from time import monotonic
 from typing import Any, Final
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import CALLBACK_TYPE, Context, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
@@ -141,10 +140,7 @@ def event_value(event: Any, key: str, default: Any = None) -> Any:
     """Read ``key`` from an action event, mapping or object alike."""
     if event is None:
         return default
-    if isinstance(event, Mapping):
-        value = event.get(key)
-    else:
-        value = getattr(event, key, None)
+    value = event.get(key) if isinstance(event, Mapping) else getattr(event, key, None)
     return default if value is None else value
 
 
@@ -239,16 +235,12 @@ def mode_label(subentry: ConfigSubentry, mode: int | None) -> str:
 
 def split_single_click(subentry: ConfigSubentry) -> bool:
     """Return whether the alternating single click is bound separately."""
-    return bool(
-        subentry.data.get(CONF_SPLIT_SINGLE_CLICK, DEFAULT_SPLIT_SINGLE_CLICK)
-    )
+    return bool(subentry.data.get(CONF_SPLIT_SINGLE_CLICK, DEFAULT_SPLIT_SINGLE_CLICK))
 
 
 def modeless_multiclick(subentry: ConfigSubentry) -> bool:
     """Return whether double/triple click ignore the current mode."""
-    return bool(
-        subentry.data.get(CONF_MODELESS_MULTICLICK, DEFAULT_MODELESS_MULTICLICK)
-    )
+    return bool(subentry.data.get(CONF_MODELESS_MULTICLICK, DEFAULT_MODELESS_MULTICLICK))
 
 
 def resolve_action(action: str, subentry: ConfigSubentry) -> str:
@@ -258,9 +250,7 @@ def resolve_action(action: str, subentry: ConfigSubentry) -> str:
     device-internal counter, not a state. Unless ``split_single_click`` is set,
     both parities are the same user-visible action.
     """
-    if action in (ACTION_CLICK_ON, ACTION_CLICK_OFF) and not split_single_click(
-        subentry
-    ):
+    if action in (ACTION_CLICK_ON, ACTION_CLICK_OFF) and not split_single_click(subentry):
         return ACTION_CLICK
     return action
 
@@ -305,10 +295,7 @@ _MODE_OWNER_ATTRS: Final = ("mode_resolver", "resolver", "mode", "modes")
 
 def _runtime_container(runtime: Any, name: str) -> Mapping[str, Any] | None:
     """Return a per-remote mapping stored on the runtime data object."""
-    if isinstance(runtime, Mapping):
-        value = runtime.get(name)
-    else:
-        value = getattr(runtime, name, None)
+    value = runtime.get(name) if isinstance(runtime, Mapping) else getattr(runtime, name, None)
     return value if isinstance(value, Mapping) else None
 
 
@@ -340,9 +327,7 @@ def _mode_owner(entry: ConfigEntry, subentry_id: str, methods: Iterable[str]) ->
     return None
 
 
-async def _async_call_mode_owner(
-    owner: Any, methods: Iterable[str], *args: Any
-) -> bool:
+async def _async_call_mode_owner(owner: Any, methods: Iterable[str], *args: Any) -> bool:
     """Call the first available method on the mode owner."""
     for name in methods:
         method = getattr(owner, name, None)
@@ -509,9 +494,7 @@ class BilresaDispatcher:
 
     async def async_setup(self) -> None:
         """Build all scripts and subscribe to the action signal."""
-        self._unsubs.append(
-            async_dispatcher_connect(self.hass, SIGNAL_ACTION, self._async_signal)
-        )
+        self._unsubs.append(async_dispatcher_connect(self.hass, SIGNAL_ACTION, self._async_signal))
         for subentry in remote_subentries(self.entry):
             await self.async_rebuild_remote(subentry.subentry_id)
 
@@ -532,10 +515,7 @@ class BilresaDispatcher:
         Reloading the whole config entry on every mapping edit would tear down
         the MQTT subscriptions and every entity, so we diff instead.
         """
-        current = {
-            subentry.subentry_id: subentry
-            for subentry in remote_subentries(self.entry)
-        }
+        current = {subentry.subentry_id: subentry for subentry in remote_subentries(self.entry)}
         for subentry_id in list(self._remotes):
             if subentry_id not in current:
                 await self._async_teardown_remote(subentry_id)
@@ -590,9 +570,7 @@ class BilresaDispatcher:
                     subentry, state, mode_key, str(action), raw, default_throttle
                 )
 
-        _LOGGER.debug(
-            "Built %s script(s) for remote %s", len(state.slots), remote_name(subentry)
-        )
+        _LOGGER.debug("Built %s script(s) for remote %s", len(state.slots), remote_name(subentry))
 
     async def _async_build_slot(
         self,
@@ -614,13 +592,9 @@ class BilresaDispatcher:
 
         if script_mode not in SCRIPT_MODE_CHOICES:
             # Absolute wheel values: a newer value fully replaces the older one.
-            script_mode = (
-                SCRIPT_MODE_RESTART if action == ACTION_WHEEL else SCRIPT_MODE_SINGLE
-            )
+            script_mode = SCRIPT_MODE_RESTART if action == ACTION_WHEEL else SCRIPT_MODE_SINGLE
 
-        label = (
-            "all modes" if mode_key == MODELESS_MODE_KEY else f"mode {mode_key}"
-        )
+        label = "all modes" if mode_key == MODELESS_MODE_KEY else f"mode {mode_key}"
         name = f"{remote_name(subentry)} {label} {action}"
         script = Script(
             self.hass,
@@ -661,7 +635,7 @@ class BilresaDispatcher:
         except (vol.Invalid, HomeAssistantError) as err:
             self._async_report_invalid(subentry, state, issue_id, mode_key, action, err)
             return None
-        except Exception:  # noqa: BLE001 - setup must survive anything here
+        except Exception:
             _LOGGER.exception(
                 "Unexpected error validating action %s of remote %s (mode %s)",
                 action,
@@ -732,7 +706,7 @@ class BilresaDispatcher:
         for slot in state.slots.values():
             try:
                 await slot.script.async_stop()
-            except Exception:  # noqa: BLE001 - teardown must not raise
+            except Exception:
                 _LOGGER.debug("Error stopping %s", slot.script.name, exc_info=True)
         if delete_issues:
             for issue_id in state.issues:
@@ -746,9 +720,7 @@ class BilresaDispatcher:
         self.async_handle_action(event, subentry_id)
 
     @callback
-    def async_handle_action(
-        self, event: Any, subentry_id: str | None = None
-    ) -> None:
+    def async_handle_action(self, event: Any, subentry_id: str | None = None) -> None:
         """Look up and run the script bound to a normalised action."""
         now = monotonic()
         if event is self._last_event and now - self._last_event_at < _DEDUP_WINDOW:
@@ -779,8 +751,7 @@ class BilresaDispatcher:
             # a triple click by default -- on every single mode change, which is
             # never what the user meant when they picked it as the cycle action.
             _LOGGER.debug(
-                "Press %s of %s was consumed as the mode cycle, not running a "
-                "binding for it",
+                "Press %s of %s was consumed as the mode cycle, not running a binding for it",
                 action,
                 remote_name(subentry),
             )
@@ -908,9 +879,7 @@ class BilresaDispatcher:
         # A fresh context per run makes every state change the script causes
         # traceable back to this remote press in the logbook.
         context = Context()
-        _LOGGER.debug(
-            "Running %s (context %s) with %s", slot.script.name, context.id, variables
-        )
+        _LOGGER.debug("Running %s (context %s) with %s", slot.script.name, context.id, variables)
         self.entry.async_create_background_task(
             self.hass,
             self._async_execute(slot, variables, context),
@@ -924,7 +893,7 @@ class BilresaDispatcher:
         """Run a script, swallowing failures so one binding cannot kill others."""
         try:
             await slot.script.async_run(run_variables=variables, context=context)
-        except Exception:  # noqa: BLE001 - a user sequence may fail in any way
+        except Exception:
             _LOGGER.exception("Error while running %s", slot.script.name)
 
 
@@ -944,9 +913,7 @@ def _fingerprint(subentry: ConfigSubentry) -> str:
     return json.dumps(payload, sort_keys=True, default=repr)
 
 
-def _run_variables(
-    event: Any, subentry: ConfigSubentry, action: str, mode: int
-) -> dict[str, Any]:
+def _run_variables(event: Any, subentry: ConfigSubentry, action: str, mode: int) -> dict[str, Any]:
     """Build the variables handed to a script run."""
     level = _as_int(event_value(event, ATTR_LEVEL))
     previous = _as_int(event_value(event, ATTR_PREVIOUS_LEVEL))
@@ -971,8 +938,7 @@ def _run_variables(
         ATTR_REMOTE_ID: subentry.subentry_id,
         ATTR_ACTION: action,
         ATTR_MODE: mode,
-        ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME)
-        or mode_label(subentry, mode),
+        ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME) or mode_label(subentry, mode),
         ATTR_MODE_SOURCE: event_value(event, ATTR_MODE_SOURCE) or mode_source(subentry),
         ATTR_ACTION_GROUP: _as_int(event_value(event, ATTR_ACTION_GROUP)),
         ATTR_LEVEL: level,
@@ -995,9 +961,7 @@ class BilresaRemoteEntity(Entity):
     _attr_has_entity_name = True
     _attr_should_poll = False
 
-    def __init__(
-        self, entry: ConfigEntry, subentry: ConfigSubentry, key: str
-    ) -> None:
+    def __init__(self, entry: ConfigEntry, subentry: ConfigSubentry, key: str) -> None:
         """Initialise the entity for a remote."""
         self._entry = entry
         self._subentry_id = subentry.subentry_id
@@ -1017,9 +981,7 @@ class BilresaRemoteEntity(Entity):
         """Subscribe to the action and mode signals of this remote."""
         await super().async_added_to_hass()
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_ACTION, self._async_action_signal
-            )
+            async_dispatcher_connect(self.hass, SIGNAL_ACTION, self._async_action_signal)
         )
         self.async_on_remove(
             async_dispatcher_connect(
@@ -1029,9 +991,7 @@ class BilresaRemoteEntity(Entity):
             )
         )
         self.async_on_remove(
-            async_dispatcher_connect(
-                self.hass, SIGNAL_MODE_CHANGED, self._async_mode_signal
-            )
+            async_dispatcher_connect(self.hass, SIGNAL_MODE_CHANGED, self._async_mode_signal)
         )
         self.async_on_remove(
             async_dispatcher_connect(

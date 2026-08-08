@@ -269,7 +269,7 @@ class BilresaModeStore:
             raw: Any = None
             try:
                 raw = await self._store.async_load()
-            except Exception:  # noqa: BLE001 - a corrupt store must not kill setup
+            except Exception:
                 _LOGGER.exception("Could not read %s, starting with empty mode state", STORAGE_KEY)
             if isinstance(raw, dict):
                 remotes = raw.get("remotes")
@@ -511,8 +511,7 @@ class ModeResolver:
         if action_group is not None and action_group not in self._warned_groups:
             self._warned_groups.add(action_group)
             _LOGGER.warning(
-                "Remote %s sent unknown action_group %s; configured groups are %s. "
-                "Keeping mode %s",
+                "Remote %s sent unknown action_group %s; configured groups are %s. Keeping mode %s",
                 self.remote_id,
                 action_group,
                 ", ".join(str(gid) for gid in self._config.group_ids),

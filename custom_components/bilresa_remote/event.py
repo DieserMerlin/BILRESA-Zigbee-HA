@@ -110,10 +110,8 @@ class BilresaEventEntity(BilresaRemoteEntity, EventEntity):
             event_type,
             {
                 ATTR_MODE: mode,
-                ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME)
-                or mode_label(subentry, mode),
-                ATTR_MODE_SOURCE: event_value(event, ATTR_MODE_SOURCE)
-                or mode_source(subentry),
+                ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME) or mode_label(subentry, mode),
+                ATTR_MODE_SOURCE: event_value(event, ATTR_MODE_SOURCE) or mode_source(subentry),
                 ATTR_LEVEL: level,
                 ATTR_LEVEL_PCT: level_pct,
                 ATTR_PREVIOUS_LEVEL: previous,

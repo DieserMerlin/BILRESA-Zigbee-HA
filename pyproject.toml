@@ -1,0 +1,46 @@
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["custom_components"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "UP",     # pyupgrade
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "SIM",    # flake8-simplify
+    "RET",    # flake8-return
+    "PTH",    # flake8-use-pathlib
+    "ASYNC",  # flake8-async
+    "RUF",    # ruff-specific
+    "D",      # pydocstyle — Home Assistant requires docstrings
+]
+ignore = [
+    # The Zigbee2MQTT helpers deliberately expose a `timeout` parameter with a
+    # sensible default — every call there is bounded by one, and the config flow
+    # depends on that signature. Pushing callers to asyncio.timeout would make
+    # the API worse, not safer.
+    "ASYNC109",
+    # Home Assistant entities are configured through mutable `_attr_*` class
+    # attributes by convention. Annotating them as ClassVar would contradict the
+    # instance-level declarations in the upstream entity base classes.
+    "RUF012",
+    # Conflicts with the D213 style used below.
+    "D212",
+    # We document modules and public API, not every dunder.
+    "D105",
+    "D107",
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "pep257"
+
+[tool.ruff.lint.per-file-ignores]
+"tools/*" = ["D"]
+
+[tool.ruff.format]
+docstring-code-format = true

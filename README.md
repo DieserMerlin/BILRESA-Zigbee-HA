@@ -15,10 +15,6 @@ own action sequence.
   <img src="custom_components/bilresa_remote/www/images/bilresa-green.svg" width="150" />
 </p>
 
-The illustrations above are the same SVGs the setup wizard shows; the LEDs light
-up according to the active mode. They are original drawings, not IKEA product
-photos — see [ASSETS.md](ASSETS.md).
-
 ---
 
 ## What this does

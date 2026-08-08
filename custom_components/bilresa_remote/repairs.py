@@ -26,7 +26,6 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.components.repairs import ConfirmRepairFlow, RepairsFlow
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
@@ -69,10 +68,7 @@ _CHOICES: list[SelectOptionDict] = [
     ),
     SelectOptionDict(
         value=CHOICE_RETRY,
-        label=(
-            "I have just unlocked the channels - watch the remote for another "
-            "30 days"
-        ),
+        label=("I have just unlocked the channels - watch the remote for another 30 days"),
     ),
     SelectOptionDict(
         value=CHOICE_IGNORE,
@@ -89,9 +85,7 @@ _CHOICE_SCHEMA = vol.Schema(
 )
 
 
-def _find_remote(
-    hass: HomeAssistant, remote_id: str
-) -> tuple[ConfigEntry, ConfigSubentry] | None:
+def _find_remote(hass: HomeAssistant, remote_id: str) -> tuple[ConfigEntry, ConfigSubentry] | None:
     """Return the config entry and subentry of a remote, by IEEE or subentry id."""
     for entry in hass.config_entries.async_entries(DOMAIN):
         for subentry in remote_subentries(entry):
@@ -130,9 +124,7 @@ class ChannelsLockedRepairFlow(RepairsFlow):
         """Start the flow."""
         return await self.async_step_confirm()
 
-    async def async_step_confirm(
-        self, user_input: dict[str, str] | None = None
-    ) -> FlowResult:
+    async def async_step_confirm(self, user_input: dict[str, str] | None = None) -> FlowResult:
         """Ask what to do and apply the answer."""
         found = _find_remote(self.hass, self._remote_id)
         if found is None:
@@ -161,9 +153,7 @@ class ChannelsLockedRepairFlow(RepairsFlow):
         # Finishing the flow removes the issue from the repairs dashboard.
         return self.async_create_entry(title="", data={})
 
-    async def _async_switch_to_internal(
-        self, entry: ConfigEntry, subentry: ConfigSubentry
-    ) -> None:
+    async def _async_switch_to_internal(self, entry: ConfigEntry, subentry: ConfigSubentry) -> None:
         """Move the remote off the device channels."""
         data = {**subentry.data, CONF_MODE_SOURCE: MODE_SOURCE_INTERNAL}
         self.hass.config_entries.async_update_subentry(entry, subentry, data=data)
@@ -196,9 +186,7 @@ class InvalidSequenceRepairFlow(RepairsFlow):
         """Start the flow."""
         return await self.async_step_confirm()
 
-    async def async_step_confirm(
-        self, user_input: dict[str, str] | None = None
-    ) -> FlowResult:
+    async def async_step_confirm(self, user_input: dict[str, str] | None = None) -> FlowResult:
         """Show the details once and close the issue on confirmation."""
         if user_input is not None:
             return self.async_create_entry(title="", data={})

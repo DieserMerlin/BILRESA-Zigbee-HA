@@ -30,7 +30,6 @@ from pathlib import Path
 from typing import Any, Final
 
 import voluptuous as vol
-
 from homeassistant.components import mqtt
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState, ConfigSubentry
@@ -58,7 +57,12 @@ from .const import (
     MODEL_WHEEL,
     MODEL_WHEEL_NAME,
 )
-from .coordinator import BilresaAction, BilresaCoordinator, RemoteConfig, async_subscribe_actions
+from .coordinator import (
+    BilresaAction,
+    BilresaCoordinator,
+    RemoteConfig,
+    async_subscribe_actions,
+)
 from .dispatcher import BilresaDispatcher, remote_ieee, remote_name, remote_subentries
 from .mode import BilresaModeStore, ModeResolver, async_get_mode_store
 
@@ -114,9 +118,7 @@ class RemoteRuntime:
     config: RemoteConfig
     coordinator: BilresaCoordinator
     mode: ModeResolver
-    history: deque[dict[str, Any]] = field(
-        default_factory=lambda: deque(maxlen=PAYLOAD_HISTORY)
-    )
+    history: deque[dict[str, Any]] = field(default_factory=lambda: deque(maxlen=PAYLOAD_HISTORY))
 
 
 @dataclass(slots=True)
@@ -186,7 +188,7 @@ async def async_register_images(hass: HomeAssistant) -> None:
         await hass.http.async_register_static_paths(
             [StaticPathConfig(IMAGE_PATH, str(IMAGE_DIR), False)]
         )
-    except Exception:  # noqa: BLE001 - missing pictures must never block setup
+    except Exception:
         _LOGGER.exception("Could not serve the illustrations from %s", IMAGE_DIR)
         return
 
@@ -243,9 +245,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: BilresaConfigEntry) -> b
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
 
-    _LOGGER.debug(
-        "Set up %s remote(s) on base topic %s", len(data.remotes), base_topic
-    )
+    _LOGGER.debug("Set up %s remote(s) on base topic %s", len(data.remotes), base_topic)
     return True
 
 
@@ -296,12 +296,12 @@ async def _async_shutdown(data: BilresaData | None) -> None:
         return
     try:
         await data.dispatcher.async_shutdown()
-    except Exception:  # noqa: BLE001 - teardown continues regardless
+    except Exception:
         _LOGGER.exception("Error while stopping the action dispatcher")
     for runtime in data.remotes.values():
         try:
             await runtime.coordinator.async_stop()
-        except Exception:  # noqa: BLE001 - teardown continues regardless
+        except Exception:
             _LOGGER.exception("Error while stopping remote %s", runtime.ieee)
     data.remotes.clear()
 
@@ -312,9 +312,7 @@ async def async_remove_config_entry_device(
     """Allow deleting devices that no longer belong to a configured remote."""
     known = _known_device_ids(config_entry)
     return not any(
-        identifier in known
-        for domain, identifier in device_entry.identifiers
-        if domain == DOMAIN
+        identifier in known for domain, identifier in device_entry.identifiers if domain == DOMAIN
     )
 
 
@@ -414,9 +412,7 @@ async def _async_update_listener(hass: HomeAssistant, entry: BilresaConfigEntry)
 
     if structure != data.structure:
         removed = {
-            subentry_id
-            for subentry_id in data.remotes
-            if subentry_id not in entry.subentries
+            subentry_id for subentry_id in data.remotes if subentry_id not in entry.subentries
         }
         for subentry_id in removed:
             data.remotes[subentry_id].mode.async_remove()
@@ -519,17 +515,13 @@ def _async_cleanup_devices(hass: HomeAssistant, entry: BilresaConfigEntry) -> No
     known = _known_device_ids(entry)
 
     for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
-        identifiers = {
-            identifier for domain, identifier in device.identifiers if domain == DOMAIN
-        }
+        identifiers = {identifier for domain, identifier in device.identifiers if domain == DOMAIN}
         if not identifiers or identifiers & known:
             continue
         _LOGGER.debug("Removing stale device %s", device.name or device.id)
         try:
-            registry.async_update_device(
-                device.id, remove_config_entry_id=entry.entry_id
-            )
-        except Exception:  # noqa: BLE001 - a stale device must not break setup
+            registry.async_update_device(device.id, remove_config_entry_id=entry.entry_id)
+        except Exception:
             _LOGGER.exception("Could not remove stale device %s", device.id)
 
 
@@ -612,14 +604,11 @@ def _resolve_mode(runtime: RemoteRuntime, requested: Any) -> int:
             mode = int(text, 10)
         except ValueError:
             raise ServiceValidationError(
-                f"{runtime.name} has no mode named {text!r}; available: "
-                + ", ".join(names)
+                f"{runtime.name} has no mode named {text!r}; available: " + ", ".join(names)
             ) from None
 
     if not 1 <= mode <= count:
-        raise ServiceValidationError(
-            f"Mode {mode} is out of range for {runtime.name} (1..{count})"
-        )
+        raise ServiceValidationError(f"Mode {mode} is out of range for {runtime.name} (1..{count})")
     return mode
 
 
@@ -664,9 +653,7 @@ async def _async_targets(
             if domain != DOMAIN:
                 continue
             if identifier == bridge_id:
-                matched.update(
-                    {runtime.subentry_id: runtime for runtime in data.remotes.values()}
-                )
+                matched.update({runtime.subentry_id: runtime for runtime in data.remotes.values()})
                 continue
             runtime = data.resolve(identifier)
             if runtime is not None:

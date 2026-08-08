@@ -142,8 +142,7 @@ class BilresaLastActionSensor(BilresaRemoteEntity, SensorEntity, RestoreEntity):
         self._attr_extra_state_attributes = {
             ATTR_TIMESTAMP: dt_util.utcnow().isoformat(),
             ATTR_MODE: mode,
-            ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME)
-            or mode_label(subentry, mode),
+            ATTR_MODE_NAME: event_value(event, ATTR_MODE_NAME) or mode_label(subentry, mode),
             ATTR_ACTION_GROUP: _int(event_value(event, ATTR_ACTION_GROUP)),
         }
         self.async_write_ha_state()

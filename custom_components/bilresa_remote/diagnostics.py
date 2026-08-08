@@ -76,8 +76,21 @@ def _step_type(step: Any) -> str:
     """Return the kind of one action step (``action``, ``delay``, ...)."""
     if not isinstance(step, dict):
         return type(step).__name__
-    for key in ("action", "service", "delay", "choose", "if", "repeat", "wait_template",
-                "wait_for_trigger", "event", "scene", "stop", "variables", "parallel"):
+    for key in (
+        "action",
+        "service",
+        "delay",
+        "choose",
+        "if",
+        "repeat",
+        "wait_template",
+        "wait_for_trigger",
+        "event",
+        "scene",
+        "stop",
+        "variables",
+        "parallel",
+    ):
         if key in step:
             value = step.get(key)
             return f"{key}: {value}" if key in ("action", "service") else key
@@ -92,10 +105,7 @@ def _mappings_summary(data: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(mappings, dict):
         return {}
     return {
-        str(mode_key): {
-            str(action): _sequence_summary(raw)
-            for action, raw in bindings.items()
-        }
+        str(mode_key): {str(action): _sequence_summary(raw) for action, raw in bindings.items()}
         for mode_key, bindings in mappings.items()
         if isinstance(bindings, dict)
     }
@@ -205,9 +215,7 @@ async def async_get_device_diagnostics(
 ) -> dict[str, Any]:
     """Return diagnostics for a single remote (or the bridge device)."""
     data = _runtime(entry)
-    identifiers = {
-        identifier for domain, identifier in device.identifiers if domain == DOMAIN
-    }
+    identifiers = {identifier for domain, identifier in device.identifiers if domain == DOMAIN}
 
     if bridge_device_id(entry) in identifiers or data is None:
         return await async_get_config_entry_diagnostics(hass, entry)

@@ -21,7 +21,6 @@ from collections.abc import Iterable, Mapping
 from typing import Any, Final
 
 import voluptuous as vol
-
 from homeassistant.config_entries import (
     SOURCE_RECONFIGURE,
     ConfigEntry,
@@ -35,7 +34,8 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import section
-from homeassistant.helpers import config_validation as cv, selector
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import selector
 
 from .const import (
     ACTION_CLICK,
@@ -207,10 +207,10 @@ async def _async_ensure_images(hass: HomeAssistant) -> None:
     flow must stay loadable without them.
     """
     try:
-        from . import async_register_images  # noqa: PLC0415
+        from . import async_register_images
 
         await async_register_images(hass)
-    except Exception:  # noqa: BLE001 - missing pictures must never block setup
+    except Exception:
         _LOGGER.debug("Could not register the illustration path", exc_info=True)
 
 
@@ -272,7 +272,7 @@ def _validate_sequence(value: Any) -> list[Any]:
         cv.SCRIPT_SCHEMA(copy.deepcopy(sequence))
     except vol.Invalid:
         raise
-    except Exception as err:  # noqa: BLE001 - never let the dialog crash
+    except Exception as err:
         raise vol.Invalid(str(err)) from err
     return sequence
 
@@ -289,7 +289,7 @@ def _sequence_selector() -> Any:
     cannot be built the flow degrades to a raw YAML object editor, which stores
     exactly the same data.
     """
-    global _SEQUENCE_SELECTOR  # noqa: PLW0603
+    global _SEQUENCE_SELECTOR
 
     if _SEQUENCE_SELECTOR is None:
         try:
@@ -336,9 +336,7 @@ def _number_selector(minimum: int, maximum: int, step: int = 1, unit: str | None
 
 def _device_selector(devices: list[dict[str, str]]) -> Any:
     """Return a dropdown listing the remotes Zigbee2MQTT knows about."""
-    options = [
-        {"value": device["ieee"], "label": device["label"]} for device in devices
-    ]
+    options = [{"value": device["ieee"], "label": device["label"]} for device in devices]
     return selector.selector({"select": {"options": options, "mode": "dropdown"}})
 
 
@@ -388,7 +386,7 @@ async def _async_mqtt_state(hass: HomeAssistant) -> str:
     if not any(entry.state is ConfigEntryState.LOADED for entry in entries):
         return "unavailable"
     try:
-        from homeassistant.components import mqtt  # noqa: PLC0415
+        from homeassistant.components import mqtt
     except ImportError:  # pragma: no cover - mqtt is a manifest dependency
         return "missing"
     waiter = getattr(mqtt, "async_wait_for_mqtt_client", None)
@@ -401,7 +399,7 @@ async def _async_fetch_remotes(hass: HomeAssistant, base_topic: str) -> list[dic
     """Return the BILRESA remotes Zigbee2MQTT currently exposes."""
     try:
         payload = await async_fetch_devices(hass, base_topic, timeout=DISCOVERY_TIMEOUT)
-    except Exception:  # noqa: BLE001 - discovery is a convenience, never fatal
+    except Exception:
         _LOGGER.debug("Could not read %s/bridge/devices", base_topic, exc_info=True)
         return []
     devices = [
@@ -443,9 +441,7 @@ class BilresaConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the subentry flows offered on the integration page."""
         return {SUBENTRY_TYPE_REMOTE: RemoteSubentryFlow}
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Greet the user, check MQTT and ask for the Zigbee2MQTT base topic."""
         if self._async_current_entries():
             return self.async_abort(reason="single_instance_allowed")
@@ -512,9 +508,7 @@ class BilresaConfigFlow(ConfigFlow, domain=DOMAIN):
 class BilresaOptionsFlow(OptionsFlow):
     """Global settings plus a way back into the tutorial."""
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Offer the global settings and the tutorial."""
         await _async_ensure_images(self.hass)
         return self.async_show_menu(
@@ -542,9 +536,7 @@ class BilresaOptionsFlow(OptionsFlow):
                     self.hass.config_entries.async_update_entry(
                         entry, data={**entry.data, CONF_BASE_TOPIC: topic}
                     )
-                return self.async_create_entry(
-                    data={**entry.options, CONF_BASE_TOPIC: topic}
-                )
+                return self.async_create_entry(data={**entry.options, CONF_BASE_TOPIC: topic})
 
         current = _entry_base_topic(entry)
         schema = vol.Schema(
@@ -696,9 +688,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
 
     # -- device selection -------------------------------------------------- #
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> SubentryFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> SubentryFlowResult:
         """Pick the remote from the Zigbee2MQTT device list."""
         errors: dict[str, str] = {}
         await _async_ensure_images(self.hass)
@@ -718,9 +708,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             elif ieee in self._known_ieees():
                 errors[CONF_IEEE] = "already_configured"
             else:
-                device = next(
-                    (item for item in self._devices if item["ieee"] == ieee), None
-                )
+                device = next((item for item in self._devices if item["ieee"] == ieee), None)
                 self._data[CONF_IEEE] = ieee
                 if device is not None:
                     self._data.setdefault(CONF_NAME, device["friendly_name"])
@@ -743,9 +731,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             step_id="user",
             data_schema=schema,
             errors=errors,
-            description_placeholders=self._placeholders(
-                device_count=str(len(self._devices))
-            ),
+            description_placeholders=self._placeholders(device_count=str(len(self._devices))),
         )
 
     async def async_step_manual(
@@ -777,9 +763,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             step_id="manual",
             data_schema=schema,
             errors=errors,
-            description_placeholders=self._placeholders(
-                device_count=str(len(self._devices))
-            ),
+            description_placeholders=self._placeholders(device_count=str(len(self._devices))),
         )
 
     # -- appearance and behaviour ------------------------------------------ #
@@ -818,9 +802,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                         CONF_MODE_COUNT: max(
                             1,
                             min(
-                                _as_int(
-                                    user_input.get(CONF_MODE_COUNT), self._mode_count
-                                ),
+                                _as_int(user_input.get(CONF_MODE_COUNT), self._mode_count),
                                 MAX_MODE_COUNT,
                             ),
                         ),
@@ -873,10 +855,8 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
             return fallback
 
         def current_advanced(key: str, fallback: Any) -> Any:
-            """Same, for the fields inside the advanced section."""
-            if key in advanced_defaults:
-                return advanced_defaults[key]
-            return fallback
+            """Return the stored value for a field inside the advanced section."""
+            return advanced_defaults.get(key, fallback)
 
         stored_groups = ", ".join(
             str(item) for item in self._data.get(CONF_GROUP_IDS, DEFAULT_GROUP_IDS)
@@ -903,9 +883,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                 ): _select_selector(MODE_SOURCES, "mode_source"),
                 vol.Required(
                     CONF_MODE_COUNT,
-                    default=_as_int(
-                        current(CONF_MODE_COUNT, self._mode_count), DEFAULT_MODE_COUNT
-                    ),
+                    default=_as_int(current(CONF_MODE_COUNT, self._mode_count), DEFAULT_MODE_COUNT),
                 ): _number_selector(1, MAX_MODE_COUNT),
                 vol.Required(
                     CONF_MODE_CYCLE_ACTION,
@@ -926,9 +904,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                             vol.Required(
                                 CONF_SPLIT_SINGLE_CLICK,
                                 default=bool(
-                                    current_advanced(
-                                        CONF_SPLIT_SINGLE_CLICK, self._split_click
-                                    )
+                                    current_advanced(CONF_SPLIT_SINGLE_CLICK, self._split_click)
                                 ),
                             ): _bool_selector(),
                             vol.Required(
@@ -952,9 +928,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                             ): _number_selector(0, MAX_WHEEL_THROTTLE_MS, 10, "ms"),
                             vol.Required(
                                 CONF_GROUP_IDS,
-                                default=str(
-                                    current_advanced(CONF_GROUP_IDS, stored_groups)
-                                ),
+                                default=str(current_advanced(CONF_GROUP_IDS, stored_groups)),
                             ): _text_selector(),
                         }
                     ),
@@ -1115,9 +1089,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                     return self._async_save_and_return()
                 return self._async_finish()
 
-        schema = vol.Schema(
-            self._sequence_fields(MODELESS_MODE_KEY, fields, user_input)
-        )
+        schema = vol.Schema(self._sequence_fields(MODELESS_MODE_KEY, fields, user_input))
         return self.async_show_form(
             step_id="multiclick",
             data_schema=schema,
@@ -1152,9 +1124,7 @@ class RemoteSubentryFlow(ConfigSubentryFlow):
                 current = user_input.get(action)
             else:
                 current = self._binding(mode_key, action)
-            schema[
-                vol.Optional(action, description={"suggested_value": current})
-            ] = editor
+            schema[vol.Optional(action, description={"suggested_value": current})] = editor
         return schema
 
     # -- persistence ------------------------------------------------------- #

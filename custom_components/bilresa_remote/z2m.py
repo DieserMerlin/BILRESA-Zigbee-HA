@@ -372,9 +372,7 @@ async def async_remove_group_member(
     )
 
 
-def _member_payload(
-    group: str | int, device: str, endpoint: str | int | None
-) -> dict[str, Any]:
+def _member_payload(group: str | int, device: str, endpoint: str | int | None) -> dict[str, Any]:
     payload: dict[str, Any] = {"group": str(group), "device": device}
     if endpoint is not None:
         payload["endpoint"] = endpoint
@@ -438,7 +436,7 @@ async def async_request(
         ) from err
     except HomeAssistantError:
         raise
-    except Exception as err:  # noqa: BLE001 - normalise everything else
+    except Exception as err:
         raise Z2MError(f"Zigbee2MQTT request {path} failed: {err}") from err
     finally:
         unsub()
@@ -480,7 +478,7 @@ async def _async_read_topic(
         ) from err
     except HomeAssistantError:
         raise
-    except Exception as err:  # noqa: BLE001 - normalise everything else
+    except Exception as err:
         raise Z2MError(f"Could not read {topic}: {err}") from err
     finally:
         unsub()
@@ -493,7 +491,7 @@ async def _async_ensure_mqtt(hass: HomeAssistant) -> None:
             available = await mqtt.async_wait_for_mqtt_client(hass)
     except TimeoutError as err:
         raise Z2MUnavailableError("MQTT client did not become available") from err
-    except Exception as err:  # noqa: BLE001 - MQTT not set up at all
+    except Exception as err:
         raise Z2MUnavailableError(f"MQTT integration is unavailable: {err}") from err
     if not available:
         raise Z2MUnavailableError("MQTT integration is unavailable")

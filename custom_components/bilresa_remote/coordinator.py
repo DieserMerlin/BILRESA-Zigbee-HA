@@ -170,9 +170,7 @@ class RemoteConfig:
             base_topic=str(base_topic or DEFAULT_BASE_TOPIC).strip("/") or DEFAULT_BASE_TOPIC,
             color=color,
             mode=ModeConfig.from_data(data),
-            split_single_click=bool(
-                data.get(CONF_SPLIT_SINGLE_CLICK, DEFAULT_SPLIT_SINGLE_CLICK)
-            ),
+            split_single_click=bool(data.get(CONF_SPLIT_SINGLE_CLICK, DEFAULT_SPLIT_SINGLE_CLICK)),
             modeless_multiclick=bool(
                 data.get(CONF_MODELESS_MULTICLICK, DEFAULT_MODELESS_MULTICLICK)
             ),
@@ -383,7 +381,7 @@ class BilresaCoordinator:
             unsub = self._unsubs.pop()
             try:
                 unsub()
-            except Exception:  # noqa: BLE001 - unloading must never fail
+            except Exception:
                 _LOGGER.exception("Error while unsubscribing remote %s", self.remote_id)
         self.mode.async_shutdown()
         _LOGGER.debug("Remote %s stopped listening on %s", self.remote_id, self.topic)
@@ -409,7 +407,7 @@ class BilresaCoordinator:
             return
         try:
             result = subscribe(self.hass, self._async_connection_status)
-        except Exception:  # noqa: BLE001 - purely an optimisation
+        except Exception:
             _LOGGER.debug("MQTT connection status unavailable", exc_info=True)
             return
         if inspect.isawaitable(result):
@@ -428,9 +426,7 @@ class BilresaCoordinator:
     @callback
     def _async_connection_status(self, connected: bool) -> None:
         if not connected and self._level_calibrated:
-            _LOGGER.debug(
-                "MQTT disconnected, dropping wheel calibration of %s", self.remote_id
-            )
+            _LOGGER.debug("MQTT disconnected, dropping wheel calibration of %s", self.remote_id)
             self._level_calibrated = False
 
     # -- message handling -------------------------------------------------- #
@@ -454,7 +450,7 @@ class BilresaCoordinator:
 
         try:
             action = self._async_build_action(payload)
-        except Exception:  # noqa: BLE001 - a bad payload must not kill the loop
+        except Exception:
             _LOGGER.exception("Unhandled error while processing %s", payload)
             return
 
