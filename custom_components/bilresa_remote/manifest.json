@@ -1,0 +1,14 @@
+{
+  "domain": "bilresa_remote",
+  "name": "IKEA BILRESA Remote",
+  "codeowners": ["@DieserMerlin"],
+  "config_flow": true,
+  "dependencies": ["mqtt", "http"],
+  "documentation": "https://github.com/DieserMerlin/BILRESA-Zigbee-HA",
+  "integration_type": "hub",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/DieserMerlin/BILRESA-Zigbee-HA/issues",
+  "loggers": ["bilresa_remote"],
+  "single_config_entry": true,
+  "version": "0.1.0"
+}

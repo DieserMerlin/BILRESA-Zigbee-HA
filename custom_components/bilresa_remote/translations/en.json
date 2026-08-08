@@ -1,0 +1,318 @@
+{
+  "config": {
+    "abort": {
+      "mqtt_missing": "The MQTT integration is not set up yet. This integration reads the remotes directly from Zigbee2MQTT over MQTT, so please add the MQTT integration and connect it to your broker first.",
+      "mqtt_unavailable": "The MQTT integration is set up but has no connection to the broker right now. Please check the broker and start this setup again.",
+      "single_instance_allowed": "The IKEA BILRESA Remote integration is already set up. Every further remote is added as a device inside that entry."
+    },
+    "error": {
+      "invalid_base_topic": "That is not a usable base topic. It must not be empty and must not contain spaces or the MQTT wildcards + and #."
+    },
+    "step": {
+      "tutorial": {
+        "description": "{image}\n\nThe BILRESA has three internal channels, and each one has to be unlocked by hand\nwith Touchlink. Zigbee2MQTT cannot do that for you: the unlock happens directly\nbetween the remote and a lamp, the coordinator is not involved. Take five\nminutes for this once and the remote will have three usable modes forever.\n\nIf you only want one mode, you can skip the whole guide. Set the mode source of\nthe remote to **Internal** later on and the integration will switch modes on its\nown, without any Touchlink at all.\n\n### 1. Pair the remote with Zigbee2MQTT\n\n1. **Reset the remote.** Hold the pairing button for 10 seconds.\n2. **Press the pairing button 4 times quickly** until the first LED responds.\n3. **Press 8 times quickly** so that Zigbee2MQTT can find the remote. Permit join\n   has to be switched on in Zigbee2MQTT while you do this.\n\n### 2. Unlock the three channels with Touchlink\n\n4. Pick a **dummy Zigbee device** in Zigbee2MQTT that you can safely play with. A\n   plain bulb is ideal.\n5. Hold the remote **right next to that device** and **press the pairing button 4\n   times quickly**. That starts Touchlink for the channel the remote is on.\n6. Once Touchlink has succeeded, **press 4 times again**, switch to the **second\n   LED** with the lower button, and repeat the Touchlink with the same dummy\n   device.\n7. **Repeat for the third channel.** After this, all three LEDs are usable and\n   the lower button really switches channels.\n\n### 3. Teach the remote its groups\n\n8. Create the three groups the remote uses internally in Zigbee2MQTT. Their IDs\n   have to be exactly **21658**, **21659** and **21660** - that is channel 1,\n   channel 2 and channel 3.\n9. **Add the dummy device to all three groups.**\n10. **Remove the dummy device from all three groups again.**\n\n> [!IMPORTANT]\n> Step 10 is not tidying up, it is the point of the whole exercise. Adding and\n> removing the dummy device makes Zigbee2MQTT write the group membership into\n> the remote, which is what teaches it the three group IDs. Removing the device\n> afterwards drops the direct Touchlink binding, so the lamp no longer reacts on\n> its own. What remains is exactly what this integration needs: the remote\n> groupcasts to 21658, 21659 or 21660, Zigbee2MQTT reports the group id, and\n> Home Assistant decides what should happen. Leave the dummy device in the\n> groups and every button press will do two things at once - the direct Zigbee\n> command and your automation.\n\n### How the buttons map\n\nThere is only one clickable surface on this remote: the scroll wheel itself.\nThere is no upper and no lower button in the Zigbee sense - the lower button is\na channel switch and stays silent. Measured on real hardware with\nZigbee2MQTT 2.13.0:\n\n| What you do | Zigbee action | Carries the channel | What it means |\n| --- | --- | --- | --- |\n| Click once | `on`, then `off`, then `on` ... | yes | Single click. It alternates, because the remote keeps an on/off state per channel. It is one single click, not two different buttons. |\n| Click twice | `on_double` | **no** | Double click. |\n| Click three times | `off_double` | **no** | Triple click. The raw name is misleading - `off_double` really is three clicks. |\n| Turn the wheel | `brightness_move_to_level` | yes | Absolute level from 1 to 255, not a step. The wheel keeps one value that is shared by all three channels. |\n| Lower button | nothing at all | - | Switches the internal channel. It sends nothing over Zigbee, so the new channel only becomes visible with the next click or turn. |\n| 4 or more clicks, long press | nothing | - | The remote ignores them. |\n\n### Why double and triple click ignore the channel\n\nA single click and a wheel turn are group commands: the remote sends them to\n21658, 21659 or 21660, and Zigbee2MQTT hands the group id on as `action_group`.\nThat is how the integration knows which mode you are in.\n\nDouble and triple click are different. They do not carry a group at all, so\ntheir payload has no `action_group` field. There is no trick that can recover\nit - the information simply never leaves the remote.\n\nThat leaves two honest options, and you pick one per remote:\n\n* **Double and triple click work in every mode** (the default). One assignment\n  per remote, valid in all modes. This matches what the hardware really does.\n* **Follow the last known mode.** The integration reuses the mode it saw on the\n  last single click or wheel turn. Convenient, but wrong for exactly one press\n  if you switch the channel and then double click straight away.\n",
+        "title": "Setting up the remote"
+      },
+      "user": {
+        "data": {
+          "base_topic": "Zigbee2MQTT base topic"
+        },
+        "data_description": {
+          "base_topic": "The prefix all Zigbee2MQTT topics start with. Leave it at zigbee2mqtt unless you changed it in the Zigbee2MQTT settings."
+        },
+        "description": "{image}\n\nWelcome. This integration turns an IKEA BILRESA remote into a freely programmable controller: up to nine modes per remote, with its own set of actions each, driven by the raw Zigbee2MQTT messages instead of by device triggers.\n\nFirst the basics: the integration listens on the device topic of Zigbee2MQTT, because that is the only place where the channel of a button press can be seen.\n\nThe next screen is a short setup guide. Afterwards you add your remotes one by one on the integration page.",
+        "title": "IKEA BILRESA Remote"
+      }
+    }
+  },
+  "config_subentries": {
+    "remote": {
+      "abort": {
+        "already_configured": "This remote is already set up.",
+        "reconfigure_successful": "Saved."
+      },
+      "entry_type": "Remote",
+      "error": {
+        "already_configured": "This remote is already set up. Reconfigure the existing one instead of adding it twice.",
+        "invalid_group_ids": "The group IDs could not be read. Enter them comma separated, for example: 21658, 21659, 21660",
+        "invalid_ieee": "That is not a usable address. It must not be empty and must not contain slashes, spaces or the MQTT wildcards + and #.",
+        "invalid_sequence": "This action sequence is not valid. Check it in YAML mode - the rest of your input has been kept.",
+        "name_required": "Please enter a name.",
+        "no_device_selected": "Please pick a remote, or tick the box to enter the address manually."
+      },
+      "initiate_flow": {
+        "reconfigure": "Reconfigure this remote",
+        "user": "Add a remote"
+      },
+      "step": {
+        "manual": {
+          "data": {
+            "ieee": "IEEE address or friendly name"
+          },
+          "data_description": {
+            "ieee": "You can find it in Zigbee2MQTT on the device page, under IEEE Address."
+          },
+          "description": "{image}\n\nEnter the IEEE address of the remote, for example 0x1035970000a4c168. The friendly name from Zigbee2MQTT works as well, as long as it matches the topic exactly.\n\nThe address must be the last part of the device topic - the part after the base topic.",
+          "title": "Enter the remote manually"
+        },
+        "mode_actions": {
+          "data": {
+            "click": "Single click",
+            "click_off": "Single click - state off",
+            "click_on": "Single click - state on",
+            "double": "Double click",
+            "mode_name": "Name of this mode",
+            "triple": "Triple click",
+            "wheel": "Scroll wheel"
+          },
+          "data_description": {
+            "click": "One click on the wheel. Both halves of the alternating on/off run this.",
+            "click_off": "One click while the remote is on the off state.",
+            "click_on": "One click while the remote is on the on state.",
+            "double": "Two quick clicks on the wheel. Raw action on_double.",
+            "mode_name": "Shown in the mode selector, for example Light, Music or Display.",
+            "triple": "Three quick clicks on the wheel. Raw action off_double - the name is misleading, it really is three clicks.",
+            "wheel": "Turning the wheel. The value is absolute, from 1 to 255, and shared by all channels of the remote."
+          },
+          "description": "{image_small}\n\n**Mode {mode_index} of {mode_count}** on {remote_name}\n\nGive this mode a name and pick what should happen. Every field is a full Home Assistant action sequence - you can use conditions, delays and templates just like in an automation. Leave a field empty and nothing happens.\n\nThe wheel provides the variables `level` (1-255), `level_pct` (0-100), `level_254` (clamped for lamps), `previous_level`, `delta` and `direction`.\n\n> [!NOTE]\n> With the internal or hybrid mode source, the action you picked as the mode switch also advances the mode. You can still bind it here; both will happen.",
+          "sections": {
+            "wheel_options": {
+              "data": {
+                "script_mode": "If it is already running",
+                "wheel_throttle_ms": "Wheel throttle"
+              },
+              "data_description": {
+                "script_mode": "Restart is right for setting an absolute value: a new turn replaces the previous one. Use queued for step by step logic.",
+                "wheel_throttle_ms": "Minimum gap between two runs while turning. The final value is always delivered."
+              },
+              "description": "How the wheel actions are executed in this mode.",
+              "name": "Wheel options"
+            }
+          },
+          "title": "Actions"
+        },
+        "multiclick": {
+          "data": {
+            "double": "Double click",
+            "triple": "Triple click"
+          },
+          "data_description": {
+            "double": "Two quick clicks on the wheel, in any mode.",
+            "triple": "Three quick clicks on the wheel, in any mode."
+          },
+          "description": "{image_small}\n\n**{remote_name}**\n\nThese two assignments are valid in every mode, because a double or triple click is sent without the channel information - the payload has no action_group. That is a property of the remote and cannot be worked around.\n\nWould you rather have one assignment per mode? Then go back and turn off *Double and triple click work in every mode*.",
+          "title": "Double and triple click"
+        },
+        "options": {
+          "data": {
+            "color": "Housing colour",
+            "mode_count": "Number of modes",
+            "mode_cycle_action": "Action that switches modes",
+            "mode_source": "Where the mode comes from",
+            "modeless_multiclick": "Double and triple click work in every mode",
+            "name": "Name"
+          },
+          "data_description": {
+            "color": "Red, beige or green - pick whichever matches your remote.",
+            "mode_count": "The hardware has three channels, but the internal mode source is not bound by that - up to nine modes are possible.",
+            "mode_cycle_action": "Only used with the internal and hybrid mode source. This action advances to the next mode; you can still bind it to actions as well.",
+            "mode_source": "Hybrid is the safe choice: it starts with the internal mode and switches to the device channels on its own as soon as it sees one. Device needs the Touchlink unlock from the setup guide. Internal works on any remote, even a fresh one.",
+            "modeless_multiclick": "This is a hardware fact, not a preference. A double or triple click leaves the remote without the channel information - there is no action_group in the payload, unlike a single click or a wheel turn. Keep this on and you assign double and triple click once for the whole remote, which is exactly what the hardware supports. Turn it off and you get one assignment per mode, based on the last mode the integration saw - convenient, but wrong for one press if you switch the channel and double click straight away.",
+            "name": "Shown on the device page and used for the entity names."
+          },
+          "description": "{image_row}\n\nGive the remote a name and pick the housing colour - the colour is only used for the illustrations, so it is easier to tell several remotes apart.\n\nA mode is one full set of actions. Switching modes turns the same wheel into a light dimmer, a volume knob or anything else.",
+          "sections": {
+            "advanced": {
+              "data": {
+                "cycle_wrap": "Wrap around after the last mode",
+                "group_ids": "Zigbee group IDs of the channels",
+                "split_single_click": "Assign the alternating single click separately",
+                "wheel_throttle_ms": "Wheel throttle"
+              },
+              "data_description": {
+                "cycle_wrap": "On: the last mode is followed by the first one again. Off: the cycle stops at the last mode.",
+                "group_ids": "Comma separated, one per mode. The BILRESA firmware uses 21658, 21659 and 21660. Only change this if your remote really sends something else.",
+                "split_single_click": "A single click alternates between on and off, because the remote keeps that state itself. Normally both run the same action. Switch this on to get two separate assignments - be aware that the alternation drifts as soon as something else switches the light.",
+                "wheel_throttle_ms": "A fast spin produces a burst of values. This is the minimum gap between two runs; the final value is always delivered, so the light never gets stuck halfway."
+              },
+              "description": "Sensible defaults. Only touch these if you know why.",
+              "name": "Advanced"
+            }
+          },
+          "title": "Remote and modes"
+        },
+        "reconfigure": {
+          "description": "{image_small}\n\n**{remote_name}** - pick what you want to change. Every step is saved on its own and brings you straight back here.",
+          "menu_options": {
+            "finish": "Done",
+            "mode_1": "Actions - mode 1",
+            "mode_2": "Actions - mode 2",
+            "mode_3": "Actions - mode 3",
+            "mode_4": "Actions - mode 4",
+            "mode_5": "Actions - mode 5",
+            "mode_6": "Actions - mode 6",
+            "mode_7": "Actions - mode 7",
+            "mode_8": "Actions - mode 8",
+            "mode_9": "Actions - mode 9",
+            "multiclick": "Actions - double and triple click",
+            "options": "Remote and modes"
+          },
+          "title": "Configure the remote"
+        },
+        "user": {
+          "data": {
+            "ieee": "Remote",
+            "manual_entry": "Enter the address manually instead"
+          },
+          "data_description": {
+            "ieee": "The list comes from the retained bridge/devices topic of Zigbee2MQTT.",
+            "manual_entry": "Use this if the remote is not paired yet or is named differently in Zigbee2MQTT."
+          },
+          "description": "{image}\n\nZigbee2MQTT reports {device_count} remote(s) that look like a BILRESA. Pick the one you want to configure.\n\nNot the one you are looking for? Tick the box below to type the address by hand.",
+          "title": "Pick the remote"
+        }
+      },
+      "title": "Remote"
+    }
+  },
+  "entity": {
+    "button": {
+      "next_mode": {
+        "name": "Next mode"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Mode"
+      }
+    },
+    "sensor": {
+      "last_action": {
+        "name": "Last action",
+        "state": {
+          "click": "Single click",
+          "click_off": "Single click (off)",
+          "click_on": "Single click (on)",
+          "double": "Double click",
+          "triple": "Triple click",
+          "wheel_down": "Wheel down",
+          "wheel_up": "Wheel up"
+        }
+      },
+      "wheel_level": {
+        "name": "Wheel level"
+      }
+    }
+  },
+  "issues": {
+    "channels_detected": {
+      "description": "This remote has sent on a second or third channel for the first time. The mode source was on Hybrid and has switched itself to the device channels, so the mode now follows the remote directly.\n\nNothing to do - this message is only here so the change does not surprise you.",
+      "title": "BILRESA {name}: device channels detected"
+    },
+    "channels_locked": {
+      "description": "This remote is set to the device mode source, but in {days} days it has only ever sent on channel 1. That usually means the Touchlink unlock has not been done.\n\nEither work through the setup guide, or switch the mode source of the remote to Internal - then the integration switches modes on its own and no Touchlink is needed.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "data": {
+              "choice": "What should happen"
+            },
+            "data_description": {
+              "choice": "Switching to Internal is the option that works without any Touchlink unlock."
+            },
+            "description": "Follow the setup guide to unlock the channels, or switch the mode source of this remote to Internal. Confirm to dismiss this message.",
+            "title": "Device channels are not unlocked"
+          }
+        }
+      },
+      "title": "BILRESA {name}: device channels are not unlocked"
+    },
+    "invalid_sequence": {
+      "description": "The action for {action} in mode {mode} could not be loaded and is being skipped. Everything else on this remote keeps working.\n\nError: {error}\n\nOpen the remote, go to the affected mode and fix the sequence.",
+      "title": "BILRESA {remote}: invalid action"
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_base_topic": "That is not a usable base topic. It must not be empty and must not contain spaces or the MQTT wildcards + and #."
+    },
+    "step": {
+      "init": {
+        "description": "Global settings of the integration. Everything that belongs to a single remote - modes, actions, colour - is configured on the remote itself, via Configure on its device page.",
+        "menu_options": {
+          "settings": "Global settings",
+          "tutorial": "Show the setup guide again"
+        },
+        "title": "IKEA BILRESA Remote"
+      },
+      "settings": {
+        "data": {
+          "base_topic": "Zigbee2MQTT base topic"
+        },
+        "data_description": {
+          "base_topic": "The prefix all Zigbee2MQTT topics start with. Changing it reconnects every remote."
+        },
+        "description": "These settings apply to every remote in this entry.",
+        "title": "Global settings"
+      },
+      "tutorial": {
+        "description": "{image}\n\nThe BILRESA has three internal channels, and each one has to be unlocked by hand\nwith Touchlink. Zigbee2MQTT cannot do that for you: the unlock happens directly\nbetween the remote and a lamp, the coordinator is not involved. Take five\nminutes for this once and the remote will have three usable modes forever.\n\nIf you only want one mode, you can skip the whole guide. Set the mode source of\nthe remote to **Internal** later on and the integration will switch modes on its\nown, without any Touchlink at all.\n\n### 1. Pair the remote with Zigbee2MQTT\n\n1. **Reset the remote.** Hold the pairing button for 10 seconds.\n2. **Press the pairing button 4 times quickly** until the first LED responds.\n3. **Press 8 times quickly** so that Zigbee2MQTT can find the remote. Permit join\n   has to be switched on in Zigbee2MQTT while you do this.\n\n### 2. Unlock the three channels with Touchlink\n\n4. Pick a **dummy Zigbee device** in Zigbee2MQTT that you can safely play with. A\n   plain bulb is ideal.\n5. Hold the remote **right next to that device** and **press the pairing button 4\n   times quickly**. That starts Touchlink for the channel the remote is on.\n6. Once Touchlink has succeeded, **press 4 times again**, switch to the **second\n   LED** with the lower button, and repeat the Touchlink with the same dummy\n   device.\n7. **Repeat for the third channel.** After this, all three LEDs are usable and\n   the lower button really switches channels.\n\n### 3. Teach the remote its groups\n\n8. Create the three groups the remote uses internally in Zigbee2MQTT. Their IDs\n   have to be exactly **21658**, **21659** and **21660** - that is channel 1,\n   channel 2 and channel 3.\n9. **Add the dummy device to all three groups.**\n10. **Remove the dummy device from all three groups again.**\n\n> [!IMPORTANT]\n> Step 10 is not tidying up, it is the point of the whole exercise. Adding and\n> removing the dummy device makes Zigbee2MQTT write the group membership into\n> the remote, which is what teaches it the three group IDs. Removing the device\n> afterwards drops the direct Touchlink binding, so the lamp no longer reacts on\n> its own. What remains is exactly what this integration needs: the remote\n> groupcasts to 21658, 21659 or 21660, Zigbee2MQTT reports the group id, and\n> Home Assistant decides what should happen. Leave the dummy device in the\n> groups and every button press will do two things at once - the direct Zigbee\n> command and your automation.\n\n### How the buttons map\n\nThere is only one clickable surface on this remote: the scroll wheel itself.\nThere is no upper and no lower button in the Zigbee sense - the lower button is\na channel switch and stays silent. Measured on real hardware with\nZigbee2MQTT 2.13.0:\n\n| What you do | Zigbee action | Carries the channel | What it means |\n| --- | --- | --- | --- |\n| Click once | `on`, then `off`, then `on` ... | yes | Single click. It alternates, because the remote keeps an on/off state per channel. It is one single click, not two different buttons. |\n| Click twice | `on_double` | **no** | Double click. |\n| Click three times | `off_double` | **no** | Triple click. The raw name is misleading - `off_double` really is three clicks. |\n| Turn the wheel | `brightness_move_to_level` | yes | Absolute level from 1 to 255, not a step. The wheel keeps one value that is shared by all three channels. |\n| Lower button | nothing at all | - | Switches the internal channel. It sends nothing over Zigbee, so the new channel only becomes visible with the next click or turn. |\n| 4 or more clicks, long press | nothing | - | The remote ignores them. |\n\n### Why double and triple click ignore the channel\n\nA single click and a wheel turn are group commands: the remote sends them to\n21658, 21659 or 21660, and Zigbee2MQTT hands the group id on as `action_group`.\nThat is how the integration knows which mode you are in.\n\nDouble and triple click are different. They do not carry a group at all, so\ntheir payload has no `action_group` field. There is no trick that can recover\nit - the information simply never leaves the remote.\n\nThat leaves two honest options, and you pick one per remote:\n\n* **Double and triple click work in every mode** (the default). One assignment\n  per remote, valid in all modes. This matches what the hardware really does.\n* **Follow the last known mode.** The integration reuses the mode it saw on the\n  last single click or wheel turn. Convenient, but wrong for exactly one press\n  if you switch the channel and then double click straight away.\n",
+        "title": "Setting up the remote"
+      }
+    }
+  },
+  "selector": {
+    "color": {
+      "options": {
+        "beige": "Beige",
+        "green": "Green",
+        "red": "Red"
+      }
+    },
+    "cycle_action": {
+      "options": {
+        "click": "Single click",
+        "double": "Double click",
+        "triple": "Triple click"
+      }
+    },
+    "mode_source": {
+      "options": {
+        "device": "Device channels - needs the Touchlink unlock",
+        "hybrid": "Hybrid - internal, switches to the device channels by itself",
+        "internal": "Internal - works without any Touchlink"
+      }
+    },
+    "script_mode": {
+      "options": {
+        "parallel": "Parallel - run at the same time",
+        "queued": "Queued - run one after another",
+        "restart": "Restart - the new turn replaces the running one",
+        "single": "Single - ignore while it is running"
+      }
+    }
+  },
+  "services": {
+    "next_mode": {
+      "description": "Advances the targeted BILRESA remotes to their next mode. Whether it wraps around after the last mode is the \"Wrap around\" option of the remote.",
+      "fields": {
+        "step": {
+          "description": "How many modes to advance. Use a negative number to go backwards; 1 is the next mode.",
+          "name": "Step"
+        }
+      },
+      "name": "Next mode"
+    },
+    "set_mode": {
+      "description": "Switches the targeted BILRESA remotes to a specific mode. Target a remote device, one of its entities, or the BILRESA Bridge device to address every remote at once.",
+      "fields": {
+        "mode": {
+          "description": "The mode to switch to, either as a number starting at 1 or as the mode name you gave it (for example \"Reading light\").",
+          "name": "Mode"
+        }
+      },
+      "name": "Set mode"
+    }
+  },
+  "title": "IKEA BILRESA Remote"
+}

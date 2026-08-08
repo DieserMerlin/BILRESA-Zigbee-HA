@@ -1,0 +1,8 @@
+{
+  "name": "IKEA BILRESA Remote",
+  "homeassistant": "2026.3.0",
+  "hacs": "2.0.5",
+  "zip_release": true,
+  "filename": "bilresa_remote.zip",
+  "hide_default_branch": true
+}
