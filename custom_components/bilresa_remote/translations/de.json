@@ -1,0 +1,318 @@
+{
+  "config": {
+    "abort": {
+      "mqtt_missing": "Die MQTT-Integration ist noch nicht eingerichtet. Diese Integration liest die Fernbedienungen direkt über MQTT aus Zigbee2MQTT - richte also bitte zuerst die MQTT-Integration ein und verbinde sie mit deinem Broker.",
+      "mqtt_unavailable": "Die MQTT-Integration ist eingerichtet, hat aber gerade keine Verbindung zum Broker. Prüfe bitte den Broker und starte diese Einrichtung noch einmal.",
+      "single_instance_allowed": "Die Integration IKEA BILRESA Fernbedienung ist bereits eingerichtet. Jede weitere Fernbedienung wird als Gerät innerhalb dieses Eintrags hinzugefügt."
+    },
+    "error": {
+      "invalid_base_topic": "Das ist kein brauchbares Basis-Topic. Es darf nicht leer sein und keine Leerzeichen oder die MQTT-Platzhalter + und # enthalten."
+    },
+    "step": {
+      "tutorial": {
+        "description": "{image}\n\nDie BILRESA hat drei interne Kanäle, und jeder einzelne muss von Hand per\nTouchlink freigeschaltet werden. Zigbee2MQTT kann das nicht übernehmen: Die\nFreischaltung läuft direkt zwischen Fernbedienung und Leuchtmittel ab, der\nKoordinator ist daran gar nicht beteiligt. Einmal fünf Minuten investieren –\ndanach hat die Fernbedienung dauerhaft drei nutzbare Modi.\n\nWenn dir ein Modus reicht, kannst du die ganze Anleitung überspringen. Stelle\ndie Modusquelle der Fernbedienung später einfach auf **Intern**, dann schaltet\ndie Integration die Modi selbst weiter – ganz ohne Touchlink.\n\n### 1. Fernbedienung mit Zigbee2MQTT verbinden\n\n1. **Fernbedienung zurücksetzen.** Die Pairing-Taste 10 Sekunden gedrückt\n   halten.\n2. **Die Pairing-Taste 4x schnell drücken**, bis die erste LED reagiert.\n3. **8x schnell drücken**, damit Zigbee2MQTT die Fernbedienung findet. In\n   Zigbee2MQTT muss dabei \"Permit join\" aktiv sein.\n\n### 2. Die drei Kanäle per Touchlink freischalten\n\n4. Such dir in Zigbee2MQTT ein **Dummy-Zigbee-Gerät** aus, mit dem du gefahrlos\n   spielen kannst. Eine einfache Lampe ist ideal.\n5. Halte die Fernbedienung **direkt an dieses Gerät** und **drücke die\n   Pairing-Taste 4x schnell**. Damit startet Touchlink für den Kanal, auf dem\n   die Fernbedienung gerade steht.\n6. Wenn Touchlink erfolgreich war, **wieder 4x drücken**, mit der unteren Taste\n   auf die **zweite LED** wechseln und Touchlink mit demselben Dummy-Gerät\n   wiederholen.\n7. **Für den dritten Kanal wiederholen.** Danach sind alle drei LEDs nutzbar\n   und die untere Taste schaltet tatsächlich den Kanal um.\n\n### 3. Der Fernbedienung ihre Gruppen beibringen\n\n8. Lege in Zigbee2MQTT die drei Gruppen an, die die Fernbedienung intern\n   benutzt. Die IDs müssen exakt **21658**, **21659** und **21660** sein – das\n   sind Kanal 1, Kanal 2 und Kanal 3.\n9. **Füge das Dummy-Gerät allen drei Gruppen hinzu.**\n10. **Entferne das Dummy-Gerät wieder aus allen drei Gruppen.**\n\n> [!IMPORTANT]\n> Schritt 10 ist kein Aufräumen, sondern der eigentliche Sinn der Übung. Durch\n> Hinzufügen und Entfernen schreibt Zigbee2MQTT die Gruppenmitgliedschaft in\n> die Fernbedienung – genau dadurch lernt sie die drei Gruppen-IDs. Das\n> anschließende Entfernen löst die direkte Touchlink-Bindung wieder, sodass die\n> Lampe nicht mehr von selbst reagiert. Übrig bleibt genau das, was diese\n> Integration braucht: Die Fernbedienung sendet Groupcasts an 21658, 21659 oder\n> 21660, Zigbee2MQTT meldet die Gruppen-ID, und Home Assistant entscheidet, was\n> passieren soll. Lässt du das Dummy-Gerät in den Gruppen, passiert bei jedem\n> Klick zweierlei – der direkte Zigbee-Befehl und deine Automatisierung.\n\n### Was die Tasten wirklich senden\n\nEs gibt nur eine Klickfläche an dieser Fernbedienung: das Scrollrad selbst.\nEine \"obere\" und eine \"untere\" Taste im Zigbee-Sinn existieren nicht – die\nuntere Taste ist ein Kanalumschalter und bleibt stumm. Am echten Gerät mit\nZigbee2MQTT 2.13.0 gemessen:\n\n| Eingabe | Zigbee-Aktion | Kanal enthalten | Bedeutung |\n| --- | --- | --- | --- |\n| 1x klicken | `on`, dann `off`, dann `on` … | ja | Einfachklick. Er alterniert, weil die Fernbedienung pro Kanal einen Ein/Aus-Zustand hält. Es ist ein einziger Klick, nicht zwei verschiedene Tasten. |\n| 2x klicken | `on_double` | **nein** | Doppelklick. |\n| 3x klicken | `off_double` | **nein** | Dreifachklick. Der Rohname führt in die Irre – `off_double` sind wirklich drei Klicks. |\n| Rad drehen | `brightness_move_to_level` | ja | Absoluter Wert von 1 bis 255, kein Schritt. Das Rad hält einen Wert, den sich alle drei Kanäle teilen. |\n| Untere Taste | gar nichts | – | Schaltet den internen Kanal um. Sie sendet nichts über Zigbee, der neue Kanal wird also erst beim nächsten Klick oder Drehen sichtbar. |\n| 4x und mehr, langer Druck | nichts | – | Die Fernbedienung ignoriert das. |\n\n### Warum Doppel- und Dreifachklick den Kanal ignorieren\n\nEinfachklick und Raddrehung sind Gruppenbefehle: Die Fernbedienung schickt sie\nan 21658, 21659 oder 21660, und Zigbee2MQTT reicht die Gruppen-ID als\n`action_group` weiter. Genau daran erkennt die Integration den Modus.\n\nDoppel- und Dreifachklick funktionieren anders. Sie tragen überhaupt keine\nGruppe, ihr Payload enthält also kein Feld `action_group`. Es gibt keinen\nTrick, der das nachträglich rekonstruieren könnte – die Information verlässt\ndie Fernbedienung schlicht nie.\n\nDamit bleiben zwei ehrliche Möglichkeiten, und du wählst pro Fernbedienung eine\ndavon:\n\n* **Doppel- und Dreifachklick gelten in jedem Modus** (Standard). Eine Belegung\n  je Fernbedienung, gültig in allen Modi. Das entspricht dem, was die Hardware\n  tatsächlich tut.\n* **Dem zuletzt bekannten Modus folgen.** Die Integration verwendet den Modus,\n  den sie beim letzten Einfachklick oder beim letzten Drehen gesehen hat.\n  Bequem, aber genau einen Tastendruck lang falsch, wenn du den Kanal wechselst\n  und sofort doppelklickst.\n",
+        "title": "Fernbedienung einrichten"
+      },
+      "user": {
+        "data": {
+          "base_topic": "Zigbee2MQTT-Basis-Topic"
+        },
+        "data_description": {
+          "base_topic": "Das Präfix, mit dem alle Zigbee2MQTT-Topics beginnen. Lass es auf zigbee2mqtt, außer du hast es in den Zigbee2MQTT-Einstellungen geändert."
+        },
+        "description": "{image}\n\nWillkommen. Diese Integration macht aus einer IKEA-BILRESA-Fernbedienung eine frei belegbare Steuerung: bis zu neun Modi je Fernbedienung, jeder mit eigenen Aktionen, gespeist aus den rohen Zigbee2MQTT-Nachrichten statt aus Geräte-Triggern.\n\nZuerst die Grundlage: Die Integration hört das Geräte-Topic von Zigbee2MQTT ab, denn nur dort ist zu sehen, auf welchem Kanal ein Tastendruck passiert ist.\n\nAuf der nächsten Seite folgt eine kurze Einrichtungsanleitung. Danach fügst du deine Fernbedienungen einzeln auf der Integrationsseite hinzu.",
+        "title": "IKEA BILRESA Fernbedienung"
+      }
+    }
+  },
+  "config_subentries": {
+    "remote": {
+      "abort": {
+        "already_configured": "Diese Fernbedienung ist bereits eingerichtet.",
+        "reconfigure_successful": "Gespeichert."
+      },
+      "entry_type": "Fernbedienung",
+      "error": {
+        "already_configured": "Diese Fernbedienung ist bereits eingerichtet. Konfiguriere die vorhandene neu, statt sie doppelt anzulegen.",
+        "invalid_group_ids": "Die Gruppen-IDs konnten nicht gelesen werden. Trag sie kommagetrennt ein, zum Beispiel: 21658, 21659, 21660",
+        "invalid_ieee": "Das ist keine brauchbare Adresse. Sie darf nicht leer sein und keine Schrägstriche, Leerzeichen oder die MQTT-Platzhalter + und # enthalten.",
+        "invalid_sequence": "Diese Aktionssequenz ist nicht gültig. Prüf sie im YAML-Modus - deine übrigen Eingaben sind erhalten geblieben.",
+        "name_required": "Bitte gib einen Namen ein.",
+        "no_device_selected": "Bitte wähle eine Fernbedienung aus oder setz den Haken, um die Adresse manuell einzugeben."
+      },
+      "initiate_flow": {
+        "reconfigure": "Diese Fernbedienung neu konfigurieren",
+        "user": "Fernbedienung hinzufügen"
+      },
+      "step": {
+        "manual": {
+          "data": {
+            "ieee": "IEEE-Adresse oder Friendly Name"
+          },
+          "data_description": {
+            "ieee": "Du findest sie in Zigbee2MQTT auf der Geräteseite unter IEEE Address."
+          },
+          "description": "{image}\n\nTrag die IEEE-Adresse der Fernbedienung ein, zum Beispiel 0x1035970000a4c168. Der Friendly Name aus Zigbee2MQTT geht genauso, solange er exakt zum Topic passt.\n\nDie Adresse muss der letzte Teil des Geräte-Topics sein - also der Teil hinter dem Basis-Topic.",
+          "title": "Fernbedienung manuell eintragen"
+        },
+        "mode_actions": {
+          "data": {
+            "click": "Einfachklick",
+            "click_off": "Einfachklick - Zustand aus",
+            "click_on": "Einfachklick - Zustand an",
+            "double": "Doppelklick",
+            "mode_name": "Name dieses Modus",
+            "triple": "Dreifachklick",
+            "wheel": "Scrollrad"
+          },
+          "data_description": {
+            "click": "Ein Klick auf das Rad. Beide Hälften des alternierenden An/Aus lösen das hier aus.",
+            "click_off": "Ein Klick, während die Fernbedienung auf dem Zustand aus steht.",
+            "click_on": "Ein Klick, während die Fernbedienung auf dem Zustand an steht.",
+            "double": "Zwei schnelle Klicks auf das Rad. Rohaktion on_double.",
+            "mode_name": "Erscheint in der Modusauswahl, zum Beispiel Licht, Musik oder Display.",
+            "triple": "Drei schnelle Klicks auf das Rad. Rohaktion off_double - der Name führt in die Irre, es sind wirklich drei Klicks.",
+            "wheel": "Drehen am Rad. Der Wert ist absolut, von 1 bis 255, und wird von allen Kanälen der Fernbedienung geteilt."
+          },
+          "description": "{image_small}\n\n**Modus {mode_index} von {mode_count}** an {remote_name}\n\nGib dem Modus einen Namen und leg fest, was passieren soll. Jedes Feld ist eine vollwertige Home-Assistant-Aktionssequenz - Bedingungen, Verzögerungen und Templates funktionieren wie in einer Automatisierung. Ein leeres Feld bedeutet: es passiert nichts.\n\nDas Rad stellt die Variablen `level` (1-255), `level_pct` (0-100), `level_254` (für Lampen geklemmt), `previous_level`, `delta` und `direction` bereit.\n\n> [!NOTE]\n> Bei interner oder hybrider Modusquelle schaltet die als Modusumschalter gewählte Aktion zusätzlich den Modus weiter. Du kannst sie hier trotzdem belegen; beides passiert.",
+          "sections": {
+            "wheel_options": {
+              "data": {
+                "script_mode": "Wenn sie schon läuft",
+                "wheel_throttle_ms": "Rad-Drosselung"
+              },
+              "data_description": {
+                "script_mode": "Neu starten passt zum Setzen eines absoluten Werts: die neue Drehung ersetzt die vorherige. Warteschlange ist die richtige Wahl für schrittweise Logik.",
+                "wheel_throttle_ms": "Mindestabstand zwischen zwei Ausführungen während des Drehens. Der letzte Wert wird immer zugestellt."
+              },
+              "description": "Wie die Rad-Aktionen in diesem Modus ausgeführt werden.",
+              "name": "Rad-Optionen"
+            }
+          },
+          "title": "Aktionen"
+        },
+        "multiclick": {
+          "data": {
+            "double": "Doppelklick",
+            "triple": "Dreifachklick"
+          },
+          "data_description": {
+            "double": "Zwei schnelle Klicks auf das Rad, in jedem Modus.",
+            "triple": "Drei schnelle Klicks auf das Rad, in jedem Modus."
+          },
+          "description": "{image_small}\n\n**{remote_name}**\n\nDiese beiden Belegungen gelten in jedem Modus, denn ein Doppel- oder Dreifachklick wird ohne Kanalinformation gesendet - im Payload steht kein action_group. Das ist eine Eigenschaft der Fernbedienung und lässt sich nicht umgehen.\n\nLieber eine Belegung je Modus? Dann geh zurück und schalte *Doppel- und Dreifachklick gelten in jedem Modus* aus.",
+          "title": "Doppel- und Dreifachklick"
+        },
+        "options": {
+          "data": {
+            "color": "Gehäusefarbe",
+            "mode_count": "Anzahl der Modi",
+            "mode_cycle_action": "Aktion, die den Modus umschaltet",
+            "mode_source": "Woher der Modus kommt",
+            "modeless_multiclick": "Doppel- und Dreifachklick gelten in jedem Modus",
+            "name": "Name"
+          },
+          "data_description": {
+            "color": "Rot, Beige oder Grün - nimm die Farbe deiner Fernbedienung.",
+            "mode_count": "Die Hardware hat drei Kanäle, die interne Modusquelle ist daran aber nicht gebunden - bis zu neun Modi sind möglich.",
+            "mode_cycle_action": "Wird nur bei der internen und der hybriden Modusquelle verwendet. Diese Aktion schaltet einen Modus weiter; du kannst sie trotzdem zusätzlich belegen.",
+            "mode_source": "Hybrid ist die sichere Wahl: startet mit dem internen Modus und stellt selbständig auf die Gerätekanäle um, sobald einer auftaucht. Gerätekanäle setzt die Touchlink-Freischaltung aus der Anleitung voraus. Intern funktioniert mit jeder Fernbedienung, auch mit einer fabrikneuen.",
+            "modeless_multiclick": "Das ist eine Eigenschaft der Hardware, kein Geschmack. Ein Doppel- oder Dreifachklick verlässt die Fernbedienung ohne Kanalinformation - im Payload steht kein action_group, anders als bei Einfachklick oder Raddrehung. Bleibt das an, belegst du Doppel- und Dreifachklick einmal für die ganze Fernbedienung, genau so wie die Hardware es hergibt. Schaltest du es aus, bekommst du eine Belegung je Modus, auf Basis des zuletzt gesehenen Modus - bequem, aber genau einen Tastendruck lang falsch, wenn du den Kanal wechselst und sofort doppelklickst.",
+            "name": "Wird auf der Geräteseite angezeigt und für die Entitätsnamen verwendet."
+          },
+          "description": "{image_row}\n\nGib der Fernbedienung einen Namen und wähle die Gehäusefarbe - die Farbe steuert nur die Illustrationen, damit sich mehrere Fernbedienungen leichter unterscheiden lassen.\n\nEin Modus ist ein kompletter Satz Aktionen. Beim Umschalten wird aus demselben Rad ein Lichtdimmer, ein Lautstärkeregler oder was immer du willst.",
+          "sections": {
+            "advanced": {
+              "data": {
+                "cycle_wrap": "Nach dem letzten Modus wieder von vorn",
+                "group_ids": "Zigbee-Gruppen-IDs der Kanäle",
+                "split_single_click": "Alternierenden Einfachklick getrennt belegen",
+                "wheel_throttle_ms": "Rad-Drosselung"
+              },
+              "data_description": {
+                "cycle_wrap": "An: nach dem letzten Modus kommt wieder der erste. Aus: der Durchlauf endet beim letzten Modus.",
+                "group_ids": "Kommagetrennt, eine je Modus. Die BILRESA-Firmware benutzt 21658, 21659 und 21660. Nur ändern, wenn deine Fernbedienung wirklich etwas anderes sendet.",
+                "split_single_click": "Ein Einfachklick wechselt zwischen on und off, weil die Fernbedienung diesen Zustand selbst hält. Normalerweise lösen beide dieselbe Aktion aus. Schalte das ein, um zwei getrennte Belegungen zu bekommen - beachte, dass die Alternierung aus dem Tritt gerät, sobald etwas anderes das Licht schaltet.",
+                "wheel_throttle_ms": "Schnelles Drehen erzeugt einen Schwall von Werten. Das ist der Mindestabstand zwischen zwei Ausführungen; der letzte Wert wird immer zugestellt, das Licht bleibt also nie auf halbem Weg stehen."
+              },
+              "description": "Sinnvolle Voreinstellungen. Nur anfassen, wenn du weißt warum.",
+              "name": "Fortgeschritten"
+            }
+          },
+          "title": "Fernbedienung und Modi"
+        },
+        "reconfigure": {
+          "description": "{image_small}\n\n**{remote_name}** - wähle aus, was du ändern möchtest. Jeder Schritt wird einzeln gespeichert und bringt dich direkt wieder hierher.",
+          "menu_options": {
+            "finish": "Fertig",
+            "mode_1": "Aktionen - Modus 1",
+            "mode_2": "Aktionen - Modus 2",
+            "mode_3": "Aktionen - Modus 3",
+            "mode_4": "Aktionen - Modus 4",
+            "mode_5": "Aktionen - Modus 5",
+            "mode_6": "Aktionen - Modus 6",
+            "mode_7": "Aktionen - Modus 7",
+            "mode_8": "Aktionen - Modus 8",
+            "mode_9": "Aktionen - Modus 9",
+            "multiclick": "Aktionen - Doppel- und Dreifachklick",
+            "options": "Fernbedienung und Modi"
+          },
+          "title": "Fernbedienung konfigurieren"
+        },
+        "user": {
+          "data": {
+            "ieee": "Fernbedienung",
+            "manual_entry": "Stattdessen Adresse manuell eingeben"
+          },
+          "data_description": {
+            "ieee": "Die Liste stammt aus dem retained Topic bridge/devices von Zigbee2MQTT.",
+            "manual_entry": "Nimm das, wenn die Fernbedienung noch nicht angelernt ist oder in Zigbee2MQTT anders heißt."
+          },
+          "description": "{image}\n\nZigbee2MQTT meldet {device_count} Gerät(e), die nach einer BILRESA aussehen. Wähle aus, welches du einrichten möchtest.\n\nNicht dabei? Setz unten den Haken, um die Adresse von Hand einzugeben.",
+          "title": "Fernbedienung auswählen"
+        }
+      },
+      "title": "Fernbedienung"
+    }
+  },
+  "entity": {
+    "button": {
+      "next_mode": {
+        "name": "Nächster Modus"
+      }
+    },
+    "select": {
+      "mode": {
+        "name": "Modus"
+      }
+    },
+    "sensor": {
+      "last_action": {
+        "name": "Letzte Aktion",
+        "state": {
+          "click": "Einfachklick",
+          "click_off": "Einfachklick (aus)",
+          "click_on": "Einfachklick (an)",
+          "double": "Doppelklick",
+          "triple": "Dreifachklick",
+          "wheel_down": "Rad runter",
+          "wheel_up": "Rad hoch"
+        }
+      },
+      "wheel_level": {
+        "name": "Radwert"
+      }
+    }
+  },
+  "issues": {
+    "channels_detected": {
+      "description": "Diese Fernbedienung hat zum ersten Mal auf einem zweiten oder dritten Kanal gesendet. Die Modusquelle stand auf Hybrid und hat selbständig auf die Gerätekanäle umgestellt - der Modus folgt jetzt direkt der Fernbedienung.\n\nZu tun ist nichts. Diese Meldung gibt es nur, damit die Umstellung dich nicht überrascht.",
+      "title": "BILRESA {name}: Gerätekanäle erkannt"
+    },
+    "channels_locked": {
+      "description": "Diese Fernbedienung steht auf der Modusquelle Gerätekanäle, hat aber in {days} Tagen ausschließlich auf Kanal 1 gesendet. Das bedeutet meistens, dass die Touchlink-Freischaltung fehlt.\n\nArbeite entweder die Einrichtungsanleitung durch, oder stell die Modusquelle der Fernbedienung auf Intern - dann schaltet die Integration die Modi selbst weiter und Touchlink wird nicht gebraucht.",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "data": {
+              "choice": "Was soll passieren"
+            },
+            "data_description": {
+              "choice": "Der Wechsel auf Intern ist die Variante, die ganz ohne Touchlink-Freischaltung funktioniert."
+            },
+            "description": "Folge der Einrichtungsanleitung, um die Kanäle freizuschalten, oder stell die Modusquelle dieser Fernbedienung auf Intern. Bestätige, um diese Meldung auszublenden.",
+            "title": "Gerätekanäle sind nicht freigeschaltet"
+          }
+        }
+      },
+      "title": "BILRESA {name}: Gerätekanäle sind nicht freigeschaltet"
+    },
+    "invalid_sequence": {
+      "description": "Die Aktion für {action} in Modus {mode} konnte nicht geladen werden und wird übersprungen. Alles andere an dieser Fernbedienung funktioniert weiter.\n\nFehler: {error}\n\nOeffne die Fernbedienung, geh in den betroffenen Modus und korrigiere die Sequenz.",
+      "title": "BILRESA {remote}: ungültige Aktion"
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_base_topic": "Das ist kein brauchbares Basis-Topic. Es darf nicht leer sein und keine Leerzeichen oder die MQTT-Platzhalter + und # enthalten."
+    },
+    "step": {
+      "init": {
+        "description": "Globale Einstellungen der Integration. Alles, was zu einer einzelnen Fernbedienung gehört - Modi, Aktionen, Farbe - wird an der Fernbedienung selbst eingestellt, über Konfigurieren auf ihrer Geräteseite.",
+        "menu_options": {
+          "settings": "Globale Einstellungen",
+          "tutorial": "Einrichtungsanleitung noch einmal anzeigen"
+        },
+        "title": "IKEA BILRESA Fernbedienung"
+      },
+      "settings": {
+        "data": {
+          "base_topic": "Zigbee2MQTT-Basis-Topic"
+        },
+        "data_description": {
+          "base_topic": "Das Präfix, mit dem alle Zigbee2MQTT-Topics beginnen. Eine Aenderung verbindet alle Fernbedienungen neu."
+        },
+        "description": "Diese Einstellungen gelten für alle Fernbedienungen in diesem Eintrag.",
+        "title": "Globale Einstellungen"
+      },
+      "tutorial": {
+        "description": "{image}\n\nDie BILRESA hat drei interne Kanäle, und jeder einzelne muss von Hand per\nTouchlink freigeschaltet werden. Zigbee2MQTT kann das nicht übernehmen: Die\nFreischaltung läuft direkt zwischen Fernbedienung und Leuchtmittel ab, der\nKoordinator ist daran gar nicht beteiligt. Einmal fünf Minuten investieren –\ndanach hat die Fernbedienung dauerhaft drei nutzbare Modi.\n\nWenn dir ein Modus reicht, kannst du die ganze Anleitung überspringen. Stelle\ndie Modusquelle der Fernbedienung später einfach auf **Intern**, dann schaltet\ndie Integration die Modi selbst weiter – ganz ohne Touchlink.\n\n### 1. Fernbedienung mit Zigbee2MQTT verbinden\n\n1. **Fernbedienung zurücksetzen.** Die Pairing-Taste 10 Sekunden gedrückt\n   halten.\n2. **Die Pairing-Taste 4x schnell drücken**, bis die erste LED reagiert.\n3. **8x schnell drücken**, damit Zigbee2MQTT die Fernbedienung findet. In\n   Zigbee2MQTT muss dabei \"Permit join\" aktiv sein.\n\n### 2. Die drei Kanäle per Touchlink freischalten\n\n4. Such dir in Zigbee2MQTT ein **Dummy-Zigbee-Gerät** aus, mit dem du gefahrlos\n   spielen kannst. Eine einfache Lampe ist ideal.\n5. Halte die Fernbedienung **direkt an dieses Gerät** und **drücke die\n   Pairing-Taste 4x schnell**. Damit startet Touchlink für den Kanal, auf dem\n   die Fernbedienung gerade steht.\n6. Wenn Touchlink erfolgreich war, **wieder 4x drücken**, mit der unteren Taste\n   auf die **zweite LED** wechseln und Touchlink mit demselben Dummy-Gerät\n   wiederholen.\n7. **Für den dritten Kanal wiederholen.** Danach sind alle drei LEDs nutzbar\n   und die untere Taste schaltet tatsächlich den Kanal um.\n\n### 3. Der Fernbedienung ihre Gruppen beibringen\n\n8. Lege in Zigbee2MQTT die drei Gruppen an, die die Fernbedienung intern\n   benutzt. Die IDs müssen exakt **21658**, **21659** und **21660** sein – das\n   sind Kanal 1, Kanal 2 und Kanal 3.\n9. **Füge das Dummy-Gerät allen drei Gruppen hinzu.**\n10. **Entferne das Dummy-Gerät wieder aus allen drei Gruppen.**\n\n> [!IMPORTANT]\n> Schritt 10 ist kein Aufräumen, sondern der eigentliche Sinn der Übung. Durch\n> Hinzufügen und Entfernen schreibt Zigbee2MQTT die Gruppenmitgliedschaft in\n> die Fernbedienung – genau dadurch lernt sie die drei Gruppen-IDs. Das\n> anschließende Entfernen löst die direkte Touchlink-Bindung wieder, sodass die\n> Lampe nicht mehr von selbst reagiert. Übrig bleibt genau das, was diese\n> Integration braucht: Die Fernbedienung sendet Groupcasts an 21658, 21659 oder\n> 21660, Zigbee2MQTT meldet die Gruppen-ID, und Home Assistant entscheidet, was\n> passieren soll. Lässt du das Dummy-Gerät in den Gruppen, passiert bei jedem\n> Klick zweierlei – der direkte Zigbee-Befehl und deine Automatisierung.\n\n### Was die Tasten wirklich senden\n\nEs gibt nur eine Klickfläche an dieser Fernbedienung: das Scrollrad selbst.\nEine \"obere\" und eine \"untere\" Taste im Zigbee-Sinn existieren nicht – die\nuntere Taste ist ein Kanalumschalter und bleibt stumm. Am echten Gerät mit\nZigbee2MQTT 2.13.0 gemessen:\n\n| Eingabe | Zigbee-Aktion | Kanal enthalten | Bedeutung |\n| --- | --- | --- | --- |\n| 1x klicken | `on`, dann `off`, dann `on` … | ja | Einfachklick. Er alterniert, weil die Fernbedienung pro Kanal einen Ein/Aus-Zustand hält. Es ist ein einziger Klick, nicht zwei verschiedene Tasten. |\n| 2x klicken | `on_double` | **nein** | Doppelklick. |\n| 3x klicken | `off_double` | **nein** | Dreifachklick. Der Rohname führt in die Irre – `off_double` sind wirklich drei Klicks. |\n| Rad drehen | `brightness_move_to_level` | ja | Absoluter Wert von 1 bis 255, kein Schritt. Das Rad hält einen Wert, den sich alle drei Kanäle teilen. |\n| Untere Taste | gar nichts | – | Schaltet den internen Kanal um. Sie sendet nichts über Zigbee, der neue Kanal wird also erst beim nächsten Klick oder Drehen sichtbar. |\n| 4x und mehr, langer Druck | nichts | – | Die Fernbedienung ignoriert das. |\n\n### Warum Doppel- und Dreifachklick den Kanal ignorieren\n\nEinfachklick und Raddrehung sind Gruppenbefehle: Die Fernbedienung schickt sie\nan 21658, 21659 oder 21660, und Zigbee2MQTT reicht die Gruppen-ID als\n`action_group` weiter. Genau daran erkennt die Integration den Modus.\n\nDoppel- und Dreifachklick funktionieren anders. Sie tragen überhaupt keine\nGruppe, ihr Payload enthält also kein Feld `action_group`. Es gibt keinen\nTrick, der das nachträglich rekonstruieren könnte – die Information verlässt\ndie Fernbedienung schlicht nie.\n\nDamit bleiben zwei ehrliche Möglichkeiten, und du wählst pro Fernbedienung eine\ndavon:\n\n* **Doppel- und Dreifachklick gelten in jedem Modus** (Standard). Eine Belegung\n  je Fernbedienung, gültig in allen Modi. Das entspricht dem, was die Hardware\n  tatsächlich tut.\n* **Dem zuletzt bekannten Modus folgen.** Die Integration verwendet den Modus,\n  den sie beim letzten Einfachklick oder beim letzten Drehen gesehen hat.\n  Bequem, aber genau einen Tastendruck lang falsch, wenn du den Kanal wechselst\n  und sofort doppelklickst.\n",
+        "title": "Fernbedienung einrichten"
+      }
+    }
+  },
+  "selector": {
+    "color": {
+      "options": {
+        "beige": "Beige",
+        "green": "Grün",
+        "red": "Rot"
+      }
+    },
+    "cycle_action": {
+      "options": {
+        "click": "Einfachklick",
+        "double": "Doppelklick",
+        "triple": "Dreifachklick"
+      }
+    },
+    "mode_source": {
+      "options": {
+        "device": "Gerätekanäle - setzt die Touchlink-Freischaltung voraus",
+        "hybrid": "Hybrid - intern, stellt selbständig auf die Gerätekanäle um",
+        "internal": "Intern - funktioniert ohne Touchlink"
+      }
+    },
+    "script_mode": {
+      "options": {
+        "parallel": "Parallel - gleichzeitig ausführen",
+        "queued": "Warteschlange - nacheinander ausführen",
+        "restart": "Neu starten - die neue Drehung ersetzt die laufende",
+        "single": "Einfach - während der Ausführung ignorieren"
+      }
+    }
+  },
+  "services": {
+    "next_mode": {
+      "description": "Schaltet die ausgewählten BILRESA-Fernbedienungen einen Modus weiter. Ob nach dem letzten Modus wieder von vorn begonnen wird, entscheidet die Option „Am Ende umbrechen“ der Fernbedienung.",
+      "fields": {
+        "step": {
+          "description": "Um wie viele Modi weitergeschaltet wird. Negative Werte gehen rückwärts; 1 ist der nächste Modus.",
+          "name": "Schrittweite"
+        }
+      },
+      "name": "Nächster Modus"
+    },
+    "set_mode": {
+      "description": "Schaltet die ausgewählten BILRESA-Fernbedienungen auf einen bestimmten Modus. Wähle ein Fernbedienungs-Gerät, eine seiner Entitäten oder das Gerät BILRESA Bridge, um alle Fernbedienungen auf einmal anzusprechen.",
+      "fields": {
+        "mode": {
+          "description": "Der Modus, auf den geschaltet werden soll – entweder als Zahl ab 1 oder als der Modusname, den du vergeben hast (zum Beispiel „Leselicht“).",
+          "name": "Modus"
+        }
+      },
+      "name": "Modus setzen"
+    }
+  },
+  "title": "IKEA BILRESA Fernbedienung"
+}

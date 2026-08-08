@@ -1,0 +1,127 @@
+name: Bug report
+description: Something does not work the way it should
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this.
+
+        Before you continue, please check the two things that explain most
+        reports:
+
+        1. Does `event.<your remote>` fire when you press the wheel? If not, the
+           integration never received an MQTT message and the problem is in
+           Zigbee2MQTT or in the base topic.
+        2. Do double and triple click behave differently from single click? That
+           is expected - they carry no channel information. See
+           "Known limitation" in the README before reporting it as a bug.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, what happened instead?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      description: Settings > Devices & services > HACS, or the `version` field in `manifest.json`.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "2026.6.4"
+    validations:
+      required: true
+
+  - type: input
+    id: z2m_version
+    attributes:
+      label: Zigbee2MQTT version
+      placeholder: "2.13.0"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Remote model
+      description: Shown in Zigbee2MQTT as the model of the device.
+      placeholder: "E2490"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode_source
+    attributes:
+      label: Mode source of the affected remote
+      options:
+        - hybrid
+        - internal
+        - device
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: payload
+    attributes:
+      label: Raw Zigbee2MQTT payload
+      description: |
+        The single most useful thing you can attach. Subscribe to your remote's
+        topic and press the button that misbehaves:
+
+        ```
+        mosquitto_sub -h <broker> -v -t 'zigbee2mqtt/<ieee>'
+        ```
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        Settings > Devices & services > IKEA BILRESA Remote > the three dots >
+        "Download diagnostics". IEEE addresses are masked and secrets are
+        redacted before the file is written.
+      render: json
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: |
+        Add this to `configuration.yaml`, restart, reproduce, then attach the log:
+
+        ```yaml
+        logger:
+          default: warning
+          logs:
+            custom_components.bilresa_remote: debug
+        ```
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched the existing issues.
+          required: true
+        - label: I am using the latest release of the integration.
+          required: true

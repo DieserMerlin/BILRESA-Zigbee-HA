@@ -1,0 +1,136 @@
+blueprint:
+  name: IKEA BILRESA remote — one action
+  description: >-
+    Run an action sequence when a BILRESA remote reports a specific press.
+
+
+    This blueprint is the alternative to the action mappings built into the
+    integration: it triggers on the remote's `event` entity, so the automation
+    belongs to you and shows up under Settings → Automations like any other.
+
+
+    Pick one press per automation. Duplicate the automation for every button and
+    mode you want to use.
+
+
+    **Mode filter.** The BILRESA has three internal channels. Set the mode
+    filter to `0` to react in every mode, or to `1`, `2`, `3` to react only in
+    that one. Note that double and triple click carry no channel information —
+    if the remote is configured with mode-independent multi-click, their `mode`
+    attribute is the last known mode, not a measured one.
+
+
+    **Available variables inside your actions:** `event_type`, `remote_mode`,
+    `mode_name`, `level` (1–255), `level_pct` (0–100), `level_254` (clamped for
+    lights), `previous_level`, `delta`, `direction` (`up`/`down`) and
+    `action_group` (the raw Zigbee group id, or `none`).
+  domain: automation
+  source_url: https://github.com/DieserMerlin/BILRESA-Zigbee-HA/blob/main/blueprints/automation/bilresa/bilresa_basic.yaml
+  homeassistant:
+    min_version: "2024.10.0"
+  input:
+    remote:
+      name: Remote
+      description: The event entity of the BILRESA remote.
+      selector:
+        entity:
+          filter:
+            - integration: bilresa_remote
+              domain: event
+    remote_action:
+      name: Press
+      description: >-
+        Which press this automation reacts to. `Single click` is what the remote
+        reports when the on/off parity is not split; `Single click (on state)`
+        and `Single click (off state)` only occur when you enabled the split.
+      default: click
+      selector:
+        select:
+          mode: dropdown
+          options:
+            - label: Single click (wheel)
+              value: click
+            - label: Single click — on state (only with split single click)
+              value: click_on
+            - label: Single click — off state (only with split single click)
+              value: click_off
+            - label: Double click
+              value: double
+            - label: Triple click
+              value: triple
+            - label: Wheel turned (either direction)
+              value: wheel
+            - label: Wheel turned up
+              value: wheel_up
+            - label: Wheel turned down
+              value: wheel_down
+    mode_filter:
+      name: Mode
+      description: >-
+        React only while the remote is in this mode. `0` reacts in every mode.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 9
+          step: 1
+          mode: box
+    actions:
+      name: Actions
+      description: What should happen.
+      selector:
+        action: {}
+
+mode: single
+max_exceeded: silent
+
+variables:
+  wanted_action: !input remote_action
+  wanted_mode: !input mode_filter
+  event_type: >-
+    {{ trigger.to_state.attributes.get('event_type') if trigger.to_state else none }}
+  remote_mode: >-
+    {{ (trigger.to_state.attributes.get('mode', 1) | int(1)) if trigger.to_state else 1 }}
+  mode_name: >-
+    {{ trigger.to_state.attributes.get('mode_name', '') if trigger.to_state else '' }}
+  level: >-
+    {{ trigger.to_state.attributes.get('level') if trigger.to_state else none }}
+  level_pct: >-
+    {{ trigger.to_state.attributes.get('level_pct') if trigger.to_state else none }}
+  level_254: >-
+    {{ [trigger.to_state.attributes.get('level') | int(254), 254] | min
+       if trigger.to_state and trigger.to_state.attributes.get('level') is not none
+       else none }}
+  previous_level: >-
+    {{ trigger.to_state.attributes.get('previous_level') if trigger.to_state else none }}
+  delta: >-
+    {{ trigger.to_state.attributes.get('delta') if trigger.to_state else none }}
+  direction: >-
+    {{ trigger.to_state.attributes.get('direction') if trigger.to_state else none }}
+  action_group: >-
+    {{ trigger.to_state.attributes.get('action_group') if trigger.to_state else none }}
+
+triggers:
+  - trigger: state
+    entity_id: !input remote
+
+conditions:
+  # The event entity restores its last state on start-up. That restore is a
+  # state change like any other, so age it out instead of reacting to a press
+  # that happened before the restart.
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state is not none
+         and trigger.to_state.state not in ['unknown', 'unavailable', 'none']
+         and (as_timestamp(now()) - as_timestamp(trigger.to_state.state, 0)) | abs < 5 }}
+  - condition: template
+    value_template: >-
+      {{ event_type is not none
+         and (event_type == wanted_action
+              or (wanted_action == 'wheel'
+                  and event_type in ['wheel_up', 'wheel_down'])) }}
+  - condition: template
+    value_template: >-
+      {{ wanted_mode | int(0) == 0 or remote_mode == wanted_mode | int(0) }}
+
+actions: !input actions

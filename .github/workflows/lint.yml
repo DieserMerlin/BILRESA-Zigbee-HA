@@ -1,0 +1,38 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Matches the style the code base is written in; keep this in sync with any
+  # local ruff configuration.
+  RUFF_LINE_LENGTH: "100"
+
+jobs:
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install ruff
+        run: python -m pip install --upgrade ruff
+
+      - name: ruff check
+        run: ruff check --output-format=github --line-length "$RUFF_LINE_LENGTH" .
+
+      - name: ruff format --check
+        run: ruff format --check --diff --line-length "$RUFF_LINE_LENGTH" .

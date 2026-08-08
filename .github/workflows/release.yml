@@ -1,0 +1,69 @@
+name: Release
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (defaults to the current ref)"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  COMPONENT_DIR: custom_components/bilresa_remote
+  ZIP_NAME: bilresa_remote.zip
+
+jobs:
+  release:
+    name: Build and attach the release ZIP
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Derive the version from the tag
+        id: version
+        run: |
+          set -euo pipefail
+          raw="${{ inputs.tag || github.ref_name }}"
+          version="${raw#v}"
+          if [ -z "$version" ]; then
+            echo "Could not derive a version from '$raw'" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Building version $version"
+
+      - name: Write the version into the manifest
+        run: |
+          set -euo pipefail
+          manifest="$COMPONENT_DIR/manifest.json"
+          tmp="$(mktemp)"
+          jq --arg version "${{ steps.version.outputs.version }}" \
+            '.version = $version' "$manifest" > "$tmp"
+          mv "$tmp" "$manifest"
+          cat "$manifest"
+
+      - name: Build the ZIP
+        run: |
+          set -euo pipefail
+          # HACS with zip_release expects the *contents* of the component
+          # directory at the root of the archive, not the directory itself.
+          cd "$COMPONENT_DIR"
+          zip -r "$GITHUB_WORKSPACE/$ZIP_NAME" . \
+            -x '*/__pycache__/*' '__pycache__/*' '*.pyc'
+          cd "$GITHUB_WORKSPACE"
+          unzip -l "$ZIP_NAME"
+
+      - name: Attach the ZIP to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: ${{ env.ZIP_NAME }}

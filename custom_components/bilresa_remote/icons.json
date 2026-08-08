@@ -1,0 +1,30 @@
+{
+  "entity": {
+    "button": {
+      "next_mode": {
+        "default": "mdi:skip-next-circle-outline"
+      }
+    },
+    "select": {
+      "mode": {
+        "default": "mdi:tune-variant"
+      }
+    },
+    "sensor": {
+      "last_action": {
+        "default": "mdi:gesture-tap-button"
+      },
+      "wheel_level": {
+        "default": "mdi:brightness-percent"
+      }
+    }
+  },
+  "services": {
+    "set_mode": {
+      "service": "mdi:tune-variant"
+    },
+    "next_mode": {
+      "service": "mdi:skip-next-circle-outline"
+    }
+  }
+}
