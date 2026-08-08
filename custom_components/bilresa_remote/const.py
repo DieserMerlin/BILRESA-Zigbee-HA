@@ -138,7 +138,7 @@ SUPPORTED_MODELS: Final = (MODEL_WHEEL,)
 
 #: Housing colours we ship an illustration for. Keys are stable identifiers used
 #: in config; labels live in translations.
-COLORS: Final = ("red", "beige", "green")
+COLORS: Final = ("red", "beige", "green", "white")
 DEFAULT_COLOR: Final = "beige"
 IMAGE_PATH: Final = f"/{DOMAIN}/images"
 

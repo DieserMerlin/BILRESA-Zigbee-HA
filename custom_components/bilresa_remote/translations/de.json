@@ -263,9 +263,10 @@
   "selector": {
     "color": {
       "options": {
+        "red": "Rostrot",
         "beige": "Beige",
-        "green": "Grün",
-        "red": "Rot"
+        "green": "Blaugrün",
+        "white": "Weiß"
       }
     },
     "cycle_action": {

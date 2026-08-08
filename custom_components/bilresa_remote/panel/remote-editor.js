@@ -1,9 +1,10 @@
 /**
  * <bilresa-remote-editor> — the heart of the panel.
  *
- * One remote, top to bottom: identity (illustration, name, colour), the mode
- * tabs, the bindable slots of the selected mode, the mode independent slots,
- * the settings and finally deletion.
+ * One remote, top to bottom: identity (illustration, name, housing colour), the
+ * mode tabs, the bindable slots of the selected mode, the mode independent
+ * slots, where the mode comes from, the remaining settings and finally
+ * deletion.
  *
  * Properties: `hass`, `remote`, `config`. Fires a composed `changed` event
  * whenever something was written, so the shell can reload the configuration.
@@ -17,12 +18,12 @@ import "./action-editor.js";
 
 import { sharedStyles } from "./styles.js";
 import {
+  ACTION_LABELS,
   MODELESS_KEY,
   MODE_SOURCE_LABELS,
   clearBinding,
   deleteRemote,
   describeError,
-  formatAction,
   subscribeEvents,
   testBinding,
   updateRemote,
@@ -31,30 +32,47 @@ import {
 const IMAGE_BASE = "/bilresa_remote/images";
 const MODEL_LABEL = "IKEA BILRESA E2490";
 const MAX_MODE_COUNT = 9;
-const DEFAULT_COLORS = ["red", "beige", "green"];
+const DEFAULT_COLORS = ["red", "beige", "green", "white"];
 const DEFAULT_MODE_SOURCES = ["hybrid", "device", "internal"];
 const DEFAULT_ACTIONS = ["click", "click_on", "click_off", "double", "triple", "wheel"];
+const DEFAULT_GROUP_IDS = [21658, 21659, 21660];
 
-const COLOR_LABELS = { red: "Rot", beige: "Beige", green: "Grün" };
-// The only hard coded colours in the panel: they have to match the housings.
-const COLOR_SWATCHES = { red: "#C4695E", beige: "#D9C7AC", green: "#4C7A52" };
+const COLOR_LABELS = { red: "Red", beige: "Beige", green: "Green" };
 
-const MODE_SOURCE_HINTS = {
-  hybrid:
-    "Zuerst die Gruppen-ID aus dem Funktelegramm auswerten. Kommt keine an, zählt Home Assistant selbst weiter. Sobald eine bekannte Gruppen-ID gesehen wurde, bleibt es beim Gerät.",
-  device:
-    "Der Modus steckt in der Gruppen-ID, mit der die Fernbedienung sendet. Home Assistant liest ihn nur ab.",
-  internal:
-    "Home Assistant zählt den Modus selbst weiter. Die Gruppen-IDs im Funktelegramm werden ignoriert.",
+/**
+ * The three housing colours are the documented exception to "colours only from
+ * Home Assistant variables", and they are applied as a plain inline background.
+ * A custom property handed to a style object never reaches the CSSOM unless it
+ * goes through setProperty — that is why the swatches used to stay colourless.
+ */
+const HOUSING_COLORS = {
+  red: "#a94e41",
+  beige: "#ccbdac",
+  green: "#547d70",
+  white: "#e2e2e0",
 };
 
+/** Colour of a lit channel LED, the same value the shipped SVGs use. */
+const LED_ON = "#fff3d0";
+
+/** Horizontal LED positions in percent of the illustration (cx 82/100/118 of 200). */
+const LED_LEFT = [41, 50, 59];
+
+/**
+ * Slot and mode-source titles come from api.js. They used to be copied into
+ * every component, which is how the panel ended up naming the same action two
+ * different ways — one table is the only way that stays fixed.
+ */
+const ACTION_TITLES = ACTION_LABELS;
+const MODE_SOURCE_TITLES = MODE_SOURCE_LABELS;
+
 const SLOT_HINTS = {
-  click: "Einmal klicken — das Rad sendet abwechselnd Ein und Aus.",
-  click_on: "Einmal klicken, während das Rad „Ein“ sendet.",
-  click_off: "Einmal klicken, während das Rad „Aus“ sendet.",
-  double: "Zweimal klicken.",
-  triple: "Dreimal klicken.",
-  wheel: "Rad drehen — absoluter Wert von 1 bis 255.",
+  click: "Click the wheel once — the remote alternates between on and off.",
+  click_on: "A single click while the remote is in its “on” phase.",
+  click_off: "A single click while the remote is in its “off” phase.",
+  double: "Click the wheel twice.",
+  triple: "Click the wheel three times.",
+  wheel: "Turn the wheel — an absolute value from 1 to 255.",
 };
 
 const SLOT_ICONS = {
@@ -67,9 +85,9 @@ const SLOT_ICONS = {
 };
 
 const SCRIPT_MODE_LABELS = {
-  single: "einfach",
-  restart: "neu starten",
-  queued: "einreihen",
+  single: "single",
+  restart: "restart",
+  queued: "queued",
   parallel: "parallel",
 };
 
@@ -93,15 +111,33 @@ const ICONS = {
   info: "M13 9h-2V7h2m0 10h-2v-6h2m-1-9A10 10 0 0 0 2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2",
   alert: "M13 14h-2V9h2m0 9h-2v-2h2M1 21h22L12 2z",
   check: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
-  close: "M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z",
   cloudOff:
     "M2.5 4.27 3.78 3l16.5 16.5-1.27 1.27-2.5-2.5H6.5A4.5 4.5 0 0 1 2.44 12a4.42 4.42 0 0 1 1.9-2.62zM19.35 10A5.5 5.5 0 0 1 18.5 21h-.67l-2-2h2.67a3.5 3.5 0 0 0 .5-6.96l-1.5-.2V10.5a5.5 5.5 0 0 0-8.4-4.68L7.6 4.38A7.5 7.5 0 0 1 19.35 10",
-  plus: "M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z",
+  help:
+    "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20m1 17h-2v-2h2zm2.07-7.75-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26A2 2 0 0 0 12 7a2 2 0 0 0-2 2H8a4 4 0 1 1 8 0c0 .88-.36 1.68-.93 2.25",
+  antenna:
+    "M12 10a2 2 0 0 1 2 2 2 2 0 0 1-2 2 2 2 0 0 1-2-2 2 2 0 0 1 2-2m0-6a8 8 0 0 1 8 8 8 8 0 0 1-1.69 4.9l-1.43-1.43A6 6 0 0 0 18 12a6 6 0 0 0-6-6 6 6 0 0 0-6 6 6 6 0 0 0 1.12 3.47l-1.43 1.43A8 8 0 0 1 4 12a8 8 0 0 1 8-8z",
+  cycle:
+    "M17.65 6.35A7.96 7.96 0 0 0 12 4a8 8 0 1 0 7.73 10h-2.08A6 6 0 1 1 12 6c1.66 0 3.14.69 4.22 1.78L13 11h7V4z",
+  swap: "M21 9 17 5v3H10v2h7v3M7 11l-4 4 4 4v-3h7v-2H7v-3z",
 };
 
 /* ---------------------------------------------------------------- helpers -- */
 
 let uidCounter = 0;
+
+/**
+ * Apply a style object. Custom properties have to go through setProperty —
+ * assigning them onto the CSSStyleDeclaration is silently ignored, which is how
+ * a "--swatch"-style value ends up unset and the element renders colourless.
+ */
+function setStyle(node, styles) {
+  for (const [prop, value] of Object.entries(styles)) {
+    if (value === undefined || value === null) continue;
+    if (prop.startsWith("--")) node.style.setProperty(prop, String(value));
+    else node.style[prop] = value;
+  }
+}
 
 function h(tag, props, ...children) {
   const node = document.createElement(tag);
@@ -111,7 +147,7 @@ function h(tag, props, ...children) {
       if (key === "class") node.className = value;
       else if (key === "text") node.textContent = value;
       else if (key === "html") node.innerHTML = value;
-      else if (key === "style" && typeof value === "object") Object.assign(node.style, value);
+      else if (key === "style" && typeof value === "object") setStyle(node, value);
       else if (key.startsWith("on") && typeof value === "function")
         node.addEventListener(key.slice(2), value);
       else node.setAttribute(key, value === true ? "" : String(value));
@@ -137,6 +173,34 @@ function colorLabel(color) {
   return COLOR_LABELS[color] || color || "";
 }
 
+function housingColor(color) {
+  return HOUSING_COLORS[color] || "";
+}
+
+/**
+ * Ink that stays readable on one of the housing colours. Derived from the
+ * colour itself instead of a fourth table, so a new housing colour needs no
+ * second entry anywhere.
+ */
+function readableInk(hex) {
+  const value = String(hex || "").replace("#", "");
+  if (value.length !== 6) return "#ffffff";
+  const channel = (offset) => {
+    const part = parseInt(value.slice(offset, offset + 2), 16) / 255;
+    return part <= 0.03928 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4;
+  };
+  const luminance = 0.2126 * channel(0) + 0.7152 * channel(2) + 0.0722 * channel(4);
+  return luminance > 0.42 ? "#1f2328" : "#ffffff";
+}
+
+function actionTitle(action) {
+  return ACTION_TITLES[action] || action || "";
+}
+
+function modeSourceTitle(source) {
+  return MODE_SOURCE_TITLES[source] || source || "";
+}
+
 function modeNameOf(remote, mode) {
   const names = Array.isArray(remote && remote.mode_names) ? remote.mode_names : [];
   const name = names[Number(mode) - 1];
@@ -145,78 +209,89 @@ function modeNameOf(remote, mode) {
 
 function modeLabel(remote, mode) {
   const name = modeNameOf(remote, mode);
-  return name ? `Modus ${mode} · ${name}` : `Modus ${mode}`;
+  return name ? `Mode ${mode} · ${name}` : `Mode ${mode}`;
+}
+
+function groupIdsOf(remote) {
+  const ids = Array.isArray(remote && remote.group_ids) ? remote.group_ids : [];
+  const numbers = ids.map(Number).filter((value) => Number.isFinite(value));
+  return numbers.length ? numbers : [...DEFAULT_GROUP_IDS];
+}
+
+function capitalize(text) {
+  const value = String(text || "");
+  return value ? value[0].toUpperCase() + value.slice(1) : value;
 }
 
 /* --------------------------------------------------- sequence in plain text -- */
 
 const DOMAIN_LABELS = {
-  light: "Licht",
-  switch: "Schalter",
-  fan: "Ventilator",
-  cover: "Rollladen",
-  lock: "Schloss",
-  climate: "Klima",
-  media_player: "Medienspieler",
-  vacuum: "Sauger",
-  humidifier: "Luftbefeuchter",
-  water_heater: "Boiler",
-  siren: "Sirene",
-  number: "Zahl",
-  input_number: "Zahl",
-  select: "Auswahl",
-  input_select: "Auswahl",
-  input_boolean: "Schalter",
-  button: "Taster",
-  input_button: "Taster",
-  scene: "Szene",
-  script: "Skript",
-  automation: "Automation",
-  notify: "Benachrichtigung",
+  light: "light",
+  switch: "switch",
+  fan: "fan",
+  cover: "cover",
+  lock: "lock",
+  climate: "thermostat",
+  media_player: "media player",
+  vacuum: "vacuum",
+  humidifier: "humidifier",
+  water_heater: "water heater",
+  siren: "siren",
+  number: "number",
+  input_number: "number",
+  select: "select",
+  input_select: "select",
+  input_boolean: "toggle",
+  button: "button",
+  input_button: "button",
+  scene: "scene",
+  script: "script",
+  automation: "automation",
+  notify: "notification",
   mqtt: "MQTT",
-  text: "Text",
-  input_text: "Text",
+  text: "text",
+  input_text: "text",
 };
 
 const SERVICE_VERBS = {
-  turn_on: "einschalten",
-  turn_off: "ausschalten",
-  toggle: "umschalten",
-  open_cover: "öffnen",
-  close_cover: "schließen",
-  stop_cover: "anhalten",
-  set_cover_position: "Position setzen",
-  set_cover_tilt_position: "Lamellen setzen",
-  set_value: "Wert setzen",
-  select_option: "Option wählen",
-  select_next: "nächste Option",
-  select_previous: "vorige Option",
-  set_temperature: "Temperatur setzen",
-  set_hvac_mode: "Betriebsart setzen",
-  set_fan_mode: "Lüfterstufe setzen",
-  set_percentage: "Stufe setzen",
-  volume_set: "Lautstärke setzen",
-  volume_up: "lauter",
-  volume_down: "leiser",
-  volume_mute: "stumm schalten",
-  media_play: "abspielen",
-  media_pause: "pausieren",
-  media_play_pause: "Wiedergabe umschalten",
-  media_stop: "stoppen",
-  media_next_track: "nächster Titel",
-  media_previous_track: "voriger Titel",
-  play_media: "Medium abspielen",
-  press: "drücken",
-  lock: "abschließen",
-  unlock: "aufschließen",
-  start: "starten",
-  stop: "stoppen",
-  pause: "pausieren",
-  return_to_base: "zurück zur Basis",
-  reload: "neu laden",
-  trigger: "auslösen",
-  send_message: "Nachricht senden",
-  publish: "senden",
+  turn_on: "turn on",
+  turn_off: "turn off",
+  toggle: "toggle",
+  open_cover: "open",
+  close_cover: "close",
+  stop_cover: "stop",
+  set_cover_position: "set the position of",
+  set_cover_tilt_position: "set the tilt of",
+  set_value: "set the value of",
+  select_option: "pick an option on",
+  select_next: "select the next option on",
+  select_previous: "select the previous option on",
+  set_temperature: "set the temperature of",
+  set_hvac_mode: "set the mode of",
+  set_fan_mode: "set the fan mode of",
+  set_percentage: "set the speed of",
+  volume_set: "set the volume of",
+  volume_up: "turn up",
+  volume_down: "turn down",
+  volume_mute: "mute",
+  media_play: "play",
+  media_pause: "pause",
+  media_play_pause: "play or pause",
+  media_stop: "stop",
+  media_next_track: "skip forward on",
+  media_previous_track: "skip back on",
+  play_media: "play media on",
+  press: "press",
+  lock: "lock",
+  unlock: "unlock",
+  start: "start",
+  stop: "stop",
+  pause: "pause",
+  return_to_base: "send home",
+  reload: "reload",
+  trigger: "trigger",
+  send_message: "send a message with",
+  publish: "publish with",
 };
 
 function entityName(hass, entityId) {
@@ -242,11 +317,11 @@ function targetSummary(step, hass) {
     return entities.length > 2 ? `${names.join(", ")} +${entities.length - 2}` : names.join(", ");
   }
   const areas = asList(target.area_id);
-  if (areas.length) return areas.length === 1 ? `Bereich ${areas[0]}` : `${areas.length} Bereiche`;
+  if (areas.length) return areas.length === 1 ? `area ${areas[0]}` : `${areas.length} areas`;
   const devices = asList(target.device_id).concat(asList(step.device_id));
-  if (devices.length) return devices.length === 1 ? "1 Gerät" : `${devices.length} Geräte`;
+  if (devices.length) return devices.length === 1 ? "1 device" : `${devices.length} devices`;
   const labels = asList(target.label_id);
-  if (labels.length) return labels.length === 1 ? `Label ${labels[0]}` : `${labels.length} Labels`;
+  if (labels.length) return labels.length === 1 ? `label ${labels[0]}` : `${labels.length} labels`;
   return "";
 }
 
@@ -265,10 +340,10 @@ function formatDelay(delay) {
   return "";
 }
 
-/** One script step as a short German phrase. */
+/** One script step as a short English phrase. */
 function stepSummary(step, hass) {
   if (typeof step === "string") return step;
-  if (!step || typeof step !== "object") return "Schritt";
+  if (!step || typeof step !== "object") return "Step";
 
   const service = step.action || step.service;
   if (typeof service === "string" && service.includes(".")) {
@@ -278,36 +353,35 @@ function stepSummary(step, hass) {
 
     if (domain === "script") {
       const target = name === "turn_on" || name === "turn_off" ? who : entityName(hass, service);
-      return `Skript ${target || ""} ${name === "turn_off" ? "stoppen" : "starten"}`.replace(/\s+/g, " ").trim();
+      const lead = name === "turn_off" ? "Stop script" : "Run script";
+      return `${lead} ${target || ""}`.replace(/\s+/g, " ").trim();
     }
-    if (domain === "scene") return `Szene ${who || ""} aktivieren`.replace(/\s+/g, " ").trim();
-    if (domain === "notify") return `Nachricht über ${name} senden`;
+    if (domain === "scene") return `Activate scene ${who || ""}`.replace(/\s+/g, " ").trim();
+    if (domain === "notify") return `Send a message via ${name}`;
 
-    const label = DOMAIN_LABELS[domain] || domain;
-    // "Licht Licht Küche" reads badly: skip the domain when the name says it.
-    const prefix = who && who.toLowerCase().includes(label.toLowerCase()) ? "" : label;
-    return `${prefix} ${who} ${verb}`.replace(/\s+/g, " ").trim();
+    const subject = who || DOMAIN_LABELS[domain] || domain;
+    return capitalize(`${verb} ${subject}`.replace(/\s+/g, " ").trim());
   }
 
   if (step.delay !== undefined) {
     const text = formatDelay(step.delay);
-    return text ? `warten (${text})` : "warten";
+    return text ? `Wait (${text})` : "Wait";
   }
-  if (step.wait_template !== undefined) return "auf Bedingung warten";
-  if (step.wait_for_trigger !== undefined) return "auf Auslöser warten";
-  if (step.choose !== undefined) return "Verzweigung (Wenn / Sonst)";
-  if (step.if !== undefined) return "Wenn / Dann";
-  if (step.repeat !== undefined) return "Wiederholung";
-  if (step.parallel !== undefined) return "parallele Schritte";
-  if (step.sequence !== undefined) return "Unterfolge";
-  if (step.scene !== undefined) return `Szene ${entityName(hass, step.scene)} aktivieren`;
-  if (step.event !== undefined) return `Ereignis ${step.event} auslösen`;
-  if (step.variables !== undefined) return "Variablen setzen";
-  if (step.condition !== undefined) return "Bedingung prüfen";
-  if (step.stop !== undefined) return "Abbrechen";
-  if (step.set_conversation_response !== undefined) return "Antwort setzen";
-  if (step.device_id !== undefined) return `Geräteaktion (${step.domain || "Gerät"})`;
-  return "Aktion";
+  if (step.wait_template !== undefined) return "Wait for a condition";
+  if (step.wait_for_trigger !== undefined) return "Wait for a trigger";
+  if (step.choose !== undefined) return "Choose (if / else)";
+  if (step.if !== undefined) return "If / then";
+  if (step.repeat !== undefined) return "Repeat";
+  if (step.parallel !== undefined) return "Parallel steps";
+  if (step.sequence !== undefined) return "Sub-sequence";
+  if (step.scene !== undefined) return `Activate scene ${entityName(hass, step.scene)}`;
+  if (step.event !== undefined) return `Fire the event ${step.event}`;
+  if (step.variables !== undefined) return "Set variables";
+  if (step.condition !== undefined) return "Check a condition";
+  if (step.stop !== undefined) return "Stop";
+  if (step.set_conversation_response !== undefined) return "Set the response";
+  if (step.device_id !== undefined) return `Device action (${step.domain || "device"})`;
+  return "Action";
 }
 
 /** The whole sequence in one line: one step verbatim, several as a count. */
@@ -316,17 +390,28 @@ function describeSequence(sequence, hass) {
   if (!steps.length) return "";
   const first = stepSummary(steps[0], hass);
   if (steps.length === 1) return first;
-  return `${steps.length} Schritte · ${first} …`;
+  return `${steps.length} steps · ${first} …`;
 }
 
 /* ------------------------------------------------------------ illustration -- */
 
 const svgCache = new Map();
 
+function imageUrl(color) {
+  const safe = DEFAULT_COLORS.includes(color) ? color : "beige";
+  return `${IMAGE_BASE}/bilresa-${safe}.svg`;
+}
+
+/**
+ * The housing colour is baked into the file, and the active channel is styled
+ * by rules that live *inside* the SVG — a `mode-N` class on an ancestor of an
+ * <img> can never reach them. So the markup is fetched and inlined, which puts
+ * the illustration's own stylesheet into this shadow root.
+ */
 function loadIllustration(color) {
   const safe = DEFAULT_COLORS.includes(color) ? color : "beige";
   if (!svgCache.has(safe)) {
-    const promise = fetch(`${IMAGE_BASE}/bilresa-${safe}.svg`, { credentials: "same-origin" })
+    const promise = fetch(imageUrl(safe), { credentials: "same-origin" })
       .then((response) => {
         if (!response.ok) throw new Error(String(response.status));
         return response.text();
@@ -339,6 +424,19 @@ function loadIllustration(color) {
     svgCache.set(safe, promise);
   }
   return svgCache.get(safe);
+}
+
+/** Parse fetched markup into an <svg> node without going through innerHTML. */
+function parseSvg(markup) {
+  try {
+    const doc = new DOMParser().parseFromString(String(markup), "image/svg+xml");
+    const root = doc.documentElement;
+    if (!root || String(root.nodeName).toLowerCase() !== "svg") return null;
+    if (root.getElementsByTagName("parsererror").length) return null;
+    return document.importNode(root, true);
+  } catch (err) {
+    return null;
+  }
 }
 
 /* ----------------------------------------------------------------- element -- */
@@ -370,7 +468,9 @@ class BilresaRemoteEditor extends HTMLElement {
     this._tabButtons = [];
     this._heroSvg = null;
     this._heroLeds = null;
+    this._heroToken = 0;
     this._dialog = null;
+    this._focusSelector = "";
 
     this._statusTimer = null;
     this._flashTimers = new Map();
@@ -579,15 +679,14 @@ class BilresaRemoteEditor extends HTMLElement {
 
   _applyCurrentMode() {
     const current = Number(this._remote && this._remote.current_mode) || 1;
-    if (this._heroSvg) {
-      for (let i = 1; i <= 3; i += 1) this._heroSvg.classList.remove(`mode-${i}`);
-      if (current <= 3) this._heroSvg.classList.add(`mode-${current}`);
-    }
+
+    if (this._heroSvg) this._paintSvgLeds(this._heroSvg, current);
     if (this._heroLeds) {
       for (const [index, dot] of this._heroLeds.entries()) {
         dot.classList.toggle("on", index + 1 === current);
       }
     }
+
     for (const tab of this._tabButtons) {
       const isCurrent = Number(tab.dataset.mode) === current;
       tab.classList.toggle("is-current", isCurrent);
@@ -595,7 +694,31 @@ class BilresaRemoteEditor extends HTMLElement {
       if (badge) badge.hidden = !isCurrent;
     }
     if (this._currentChip) {
-      this._currentChip.textContent = `Am Gerät aktiv: ${modeLabel(this._remote, current)}`;
+      this._currentChip.textContent = `On the device: ${modeLabel(this._remote, current)}`;
+    }
+  }
+
+  /**
+   * Light the LED of the active channel inside an inlined illustration. The
+   * `mode-N` class drives the glow filter declared in the SVG itself; the
+   * inline fill is set as well so the LED is right even if that internal
+   * stylesheet ever changes.
+   */
+  _paintSvgLeds(svg, current) {
+    for (let i = 1; i <= 3; i += 1) svg.classList.remove(`mode-${i}`);
+    if (current >= 1 && current <= 3) svg.classList.add(`mode-${current}`);
+    for (let i = 1; i <= 3; i += 1) {
+      const led = svg.querySelector(`#led-${i}`);
+      if (!led) continue;
+      const on = i === current;
+      led.classList.toggle("is-active", on);
+      if (on) {
+        led.style.setProperty("fill", LED_ON);
+        led.style.setProperty("fill-opacity", "1");
+      } else {
+        led.style.removeProperty("fill");
+        led.style.removeProperty("fill-opacity");
+      }
     }
   }
 
@@ -607,6 +730,17 @@ class BilresaRemoteEditor extends HTMLElement {
 
   _isModeless() {
     return this._remote ? this._remote.modeless_multiclick !== false : true;
+  }
+
+  _modeSource() {
+    const source = this._remote && this._remote.mode_source;
+    return typeof source === "string" && source ? source : "hybrid";
+  }
+
+  /** What actually drives the mode right now — hybrid reports device once promoted. */
+  _effectiveSource() {
+    const effective = this._remote && this._remote.effective_mode_source;
+    return typeof effective === "string" && effective ? effective : this._modeSource();
   }
 
   _clampMode() {
@@ -627,6 +761,18 @@ class BilresaRemoteEditor extends HTMLElement {
 
   _emitChanged() {
     this.dispatchEvent(new CustomEvent("changed", { bubbles: true, composed: true }));
+  }
+
+  /**
+   * Open the guide. The shell owns the router, so the editor navigates the same
+   * way it does: push the path and let the frontend router pick it up.
+   */
+  _openGuide(anchor) {
+    const first = window.location.pathname.split("/").filter(Boolean)[0];
+    const prefix = first ? `/${first}` : "";
+    const target = `${prefix}/guide${anchor ? `#${anchor}` : ""}`;
+    window.history.pushState(null, "", target);
+    window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
   }
 
   _setStatus(message, kind = "info") {
@@ -666,7 +812,7 @@ class BilresaRemoteEditor extends HTMLElement {
     this._busy = true;
     try {
       await updateRemote(this._hass, remote.subentry_id, changes);
-      this._setStatus("Gespeichert.", "success");
+      this._setStatus("Saved.", "success");
       this._emitChanged();
       return true;
     } catch (err) {
@@ -696,9 +842,20 @@ class BilresaRemoteEditor extends HTMLElement {
     body.append(this._buildHead());
     body.append(this._buildModes());
     if (this._isModeless()) body.append(this._buildModeless());
+    body.append(this._buildModeSource());
     body.append(this._buildSettings());
     body.append(this._buildDanger());
     this._applyCurrentMode();
+    this._restoreFocus();
+  }
+
+  /** A control that caused a re-render keeps the keyboard focus. */
+  _restoreFocus() {
+    const selector = this._focusSelector;
+    this._focusSelector = "";
+    if (!selector) return;
+    const target = this.shadowRoot.querySelector(selector);
+    if (target) target.focus();
   }
 
   /* --------------------------------------------------------------- head -- */
@@ -712,7 +869,7 @@ class BilresaRemoteEditor extends HTMLElement {
       type: "text",
       class: "title-input",
       value: remote.name || "",
-      "aria-label": "Name der Fernbedienung",
+      "aria-label": "Name of this remote",
       spellcheck: "false",
       onchange: (event) => this._commitName(event.target),
       onkeydown: (event) => {
@@ -735,42 +892,6 @@ class BilresaRemoteEditor extends HTMLElement {
         h("span", { class: "chip error" }, icon("cloudOff"), h("span", { text: "Offline in Zigbee2MQTT" }))
       );
     }
-    const effective = remote.effective_mode_source;
-    if (effective && effective !== remote.mode_source) {
-      chips.append(
-        h("span", { class: "chip neutral" }, icon("info"), h("span", {
-          text: `Modusquelle wirkt als „${MODE_SOURCE_LABELS[effective] || effective}“`,
-        }))
-      );
-    }
-
-    const colors = (this._config && Array.isArray(this._config.colors) ? this._config.colors : DEFAULT_COLORS)
-      .filter((color) => typeof color === "string");
-    const swatches = h("div", {
-      class: "swatches",
-      role: "radiogroup",
-      "aria-label": "Gehäusefarbe",
-      onkeydown: (event) => this._swatchKeydown(event, colors),
-    });
-    for (const color of colors) {
-      const active = color === remote.color;
-      swatches.append(
-        h("button", {
-          type: "button",
-          class: `swatch${active ? " is-active" : ""}`,
-          role: "radio",
-          "aria-checked": active ? "true" : "false",
-          "aria-label": `Gehäusefarbe ${colorLabel(color)}`,
-          title: colorLabel(color),
-          tabindex: active ? "0" : "-1",
-          "data-color": color,
-          style: { "--swatch": COLOR_SWATCHES[color] || "var(--bil-text-dim)" },
-          onclick: () => {
-            if (color !== this._remote.color) this._patch({ color });
-          },
-        })
-      );
-    }
 
     return h(
       "section",
@@ -782,13 +903,72 @@ class BilresaRemoteEditor extends HTMLElement {
         nameInput,
         h("p", { class: "head-meta mono", text: `${remote.ieee || ""} · ${MODEL_LABEL}` }),
         chips,
-        h(
-          "div",
-          { class: "swatch-row" },
-          h("span", { class: "swatch-label", text: "Gehäusefarbe" }),
-          swatches
-        )
+        this._buildSwatches()
       )
+    );
+  }
+
+  _buildSwatches() {
+    const remote = this._remote;
+    const colors = (this._config && Array.isArray(this._config.colors) ? this._config.colors : DEFAULT_COLORS)
+      .filter((color) => typeof color === "string");
+    const activeIndex = colors.indexOf(remote.color);
+
+    const swatches = h("div", {
+      class: "swatches",
+      role: "radiogroup",
+      "aria-label": "Housing colour",
+      onkeydown: (event) => this._swatchKeydown(event, colors),
+    });
+
+    colors.forEach((color, index) => {
+      const active = color === remote.color;
+      const tone = housingColor(color);
+      const label = colorLabel(color);
+      swatches.append(
+        h(
+          "button",
+          {
+            type: "button",
+            class: `swatch${active ? " is-active" : ""}`,
+            role: "radio",
+            "aria-checked": active ? "true" : "false",
+            "aria-label": `Housing colour ${label}`,
+            title: label,
+            tabindex: (activeIndex < 0 ? index === 0 : active) ? "0" : "-1",
+            "data-color": color,
+            onclick: () => {
+              if (color !== this._remote.color) {
+                this._focusSelector = `.swatch[data-color="${color}"]`;
+                this._patch({ color });
+              }
+            },
+          },
+          // Inline background instead of a custom property or a pseudo element:
+          // this is the one path that cannot be lost on the way to the CSSOM.
+          h("span", {
+            class: "swatch-dot",
+            "aria-hidden": "true",
+            style: { backgroundColor: tone || "var(--bil-text-dim)" },
+          }),
+          active
+            ? h("span", {
+                class: "swatch-check",
+                "aria-hidden": "true",
+                style: { color: readableInk(tone) },
+                html: `<svg viewBox="0 0 24 24"><path d="${ICONS.check}"/></svg>`,
+              })
+            : null
+        )
+      );
+    });
+
+    return h(
+      "div",
+      { class: "swatch-row" },
+      h("span", { class: "swatch-label", text: "Housing colour" }),
+      swatches,
+      h("span", { class: "swatch-current muted small", text: colorLabel(remote.color) })
     );
   }
 
@@ -805,47 +985,60 @@ class BilresaRemoteEditor extends HTMLElement {
     else if (event.key === "Home") next = 0;
     else if (event.key === "End") next = colors.length - 1;
     const color = colors[next];
-    if (color && color !== this._remote.color) this._patch({ color });
+    if (color && color !== this._remote.color) {
+      this._focusSelector = `.swatch[data-color="${color}"]`;
+      this._patch({ color });
+    }
   }
 
+  /**
+   * Draw the illustration. The <img> plus an LED overlay renders immediately
+   * and is always correct; the inlined SVG replaces it as soon as it arrives,
+   * because only then the remote's own glow styling can be used.
+   */
   _fillHero(host, color) {
-    host.textContent = "";
-    const fallback = () => {
-      host.textContent = "";
-      const safe = DEFAULT_COLORS.includes(color) ? color : "beige";
-      const wrap = h("div", { class: "hero-fallback" });
-      wrap.append(
-        h("img", { src: `${IMAGE_BASE}/bilresa-${safe}.svg`, alt: "", draggable: "false" })
-      );
-      const overlay = h("span", { class: "led-overlay" });
-      const left = [41, 50, 59];
-      this._heroLeds = [];
-      for (let i = 0; i < 3; i += 1) {
-        const dot = h("i", { style: { left: `${left[i]}%` } });
-        this._heroLeds.push(dot);
-        overlay.append(dot);
-      }
-      wrap.append(overlay);
-      host.append(wrap);
-      this._applyCurrentMode();
-    };
+    const token = ++this._heroToken;
+    const safe = DEFAULT_COLORS.includes(color) ? color : "beige";
 
-    loadIllustration(color)
+    host.textContent = "";
+    const wrap = h("div", { class: "hero-fallback" });
+    wrap.append(
+      h("img", {
+        src: imageUrl(safe),
+        alt: `IKEA BILRESA remote, ${colorLabel(safe)}`,
+        draggable: "false",
+      })
+    );
+    const overlay = h("span", { class: "led-overlay", "aria-hidden": "true" });
+    const dots = [];
+    for (let i = 0; i < 3; i += 1) {
+      const dot = h("i", { style: { left: `${LED_LEFT[i]}%` } });
+      dots.push(dot);
+      overlay.append(dot);
+    }
+    wrap.append(overlay);
+    host.append(wrap);
+    this._heroSvg = null;
+    this._heroLeds = dots;
+    this._applyCurrentMode();
+
+    loadIllustration(safe)
       .then((markup) => {
-        if (!host.isConnected) return;
-        host.innerHTML = markup;
-        const svg = host.querySelector("svg");
-        if (!svg) {
-          fallback();
-          return;
-        }
+        // A newer render (or another colour) already owns the hero.
+        if (token !== this._heroToken) return;
+        const svg = parseSvg(markup);
+        if (!svg) return;
         svg.setAttribute("focusable", "false");
+        svg.removeAttribute("width");
+        svg.removeAttribute("height");
+        host.textContent = "";
+        host.append(svg);
         this._heroSvg = svg;
         this._heroLeds = null;
         this._applyCurrentMode();
       })
       .catch(() => {
-        if (host.isConnected) fallback();
+        // The <img> is already on screen, so there is nothing to fall back to.
       });
   }
 
@@ -853,7 +1046,7 @@ class BilresaRemoteEditor extends HTMLElement {
     const name = String(input.value || "").trim();
     if (!name) {
       input.value = this._remote.name || "";
-      this._setStatus("Der Name darf nicht leer sein.", "error");
+      this._setStatus("The name cannot be empty.", "error");
       return;
     }
     if (name === this._remote.name) return;
@@ -869,7 +1062,7 @@ class BilresaRemoteEditor extends HTMLElement {
     const tablist = h("div", {
       class: "tabs",
       role: "tablist",
-      "aria-label": "Modi",
+      "aria-label": "Modes",
       onkeydown: (event) => this._tabKeydown(event),
     });
 
@@ -892,13 +1085,13 @@ class BilresaRemoteEditor extends HTMLElement {
           tabindex: selected ? "0" : "-1",
           "data-mode": String(mode),
           "aria-label": `${modeLabel(remote, mode)}${
-            Number(remote.current_mode) === mode ? " — am Gerät aktiv" : ""
-          }. Zum Umbenennen F2 drücken.`,
+            Number(remote.current_mode) === mode ? " — active on the device" : ""
+          }. Press F2 to rename.`,
           onclick: () => this._selectMode(mode),
           ondblclick: () => this._startRename(mode),
         },
         h("span", { class: "tab-index", text: String(mode) }),
-        h("span", { class: "tab-name", text: name || `Modus ${mode}` }),
+        h("span", { class: "tab-name", text: name || `Mode ${mode}` }),
         h("span", { class: "tab-live", hidden: true, "aria-hidden": "true" })
       );
       this._tabButtons.push(tab);
@@ -910,8 +1103,8 @@ class BilresaRemoteEditor extends HTMLElement {
       {
         type: "button",
         class: "icon-btn",
-        "aria-label": `Modus ${this._activeMode} umbenennen`,
-        title: "Modus umbenennen",
+        "aria-label": `Rename mode ${this._activeMode}`,
+        title: "Rename this mode",
         onclick: () => this._startRename(this._activeMode),
       },
       icon("pencil")
@@ -935,10 +1128,10 @@ class BilresaRemoteEditor extends HTMLElement {
         h(
           "div",
           null,
-          h("h2", { text: "Modi" }),
+          h("h2", { text: "Modes" }),
           h("p", {
             text:
-              "Jeder Modus ist ein eigener Kanal der Fernbedienung mit eigenen Aktionen. Doppelklick auf einen Reiter benennt ihn um.",
+              "Every mode is one channel of the remote with its own actions. Double-click a tab to rename it.",
           })
         ),
         h("div", { class: "spacer" }),
@@ -954,8 +1147,8 @@ class BilresaRemoteEditor extends HTMLElement {
       type: "text",
       class: "tab-rename",
       value: modeNameOf(this._remote, mode),
-      "aria-label": `Name für Modus ${mode}`,
-      placeholder: `Modus ${mode}`,
+      "aria-label": `Name of mode ${mode}`,
+      placeholder: `Mode ${mode}`,
       spellcheck: "false",
       onkeydown: (event) => {
         if (event.key === "Enter") {
@@ -994,7 +1187,7 @@ class BilresaRemoteEditor extends HTMLElement {
     const names = [];
     const count = this._modeCount();
     for (let i = 1; i <= count; i += 1) names.push(modeNameOf(this._remote, i));
-    names[mode - 1] = value || `Modus ${mode}`;
+    names[mode - 1] = value || `Mode ${mode}`;
     if (names[mode - 1] === modeNameOf(this._remote, mode)) {
       this._render();
       return;
@@ -1055,15 +1248,13 @@ class BilresaRemoteEditor extends HTMLElement {
 
     if (remote.split_single_click === true) {
       list.append(
-        h(
-          "p",
-          { class: "slot-note muted small" },
-          `Das Rad sendet beim einfachen Klick abwechselnd „on“ und „off“. Weil „${formatAction(
-            "click_on"
-          )}“ und „${formatAction(
-            "click_off"
-          )}“ getrennt belegt sind, hängt es vom internen Zustand der Fernbedienung ab, welcher Slot läuft.`
-        )
+        h("p", {
+          class: "slot-note muted small",
+          text:
+            `A single click alternates between “on” and “off” inside the remote. With ` +
+            `“${actionTitle("click_on")}” and “${actionTitle("click_off")}” bound separately, ` +
+            `which slot runs depends on that internal state.`,
+        })
       );
     }
     return list;
@@ -1072,8 +1263,8 @@ class BilresaRemoteEditor extends HTMLElement {
   _buildSlotRow(modeKey, action) {
     const binding = this._binding(modeKey, action);
     const summary = binding ? describeSequence(binding.sequence, this._hass) : "";
-    const label = formatAction(action);
-    const scope = modeKey === MODELESS_KEY ? "für alle Modi" : `in ${modeLabel(this._remote, Number(modeKey))}`;
+    const label = actionTitle(action);
+    const scope = modeKey === MODELESS_KEY ? "for all modes" : `in ${modeLabel(this._remote, Number(modeKey))}`;
 
     const row = h("div", {
       class: `slot${binding ? "" : " is-empty"}`,
@@ -1097,7 +1288,7 @@ class BilresaRemoteEditor extends HTMLElement {
       h("p", { class: "slot-sub muted small", text: SLOT_HINTS[action] || "" }),
       binding
         ? h("p", { class: "slot-summary", title: summary, text: summary })
-        : h("p", { class: "slot-summary empty", text: "Noch nichts hinterlegt" })
+        : h("p", { class: "slot-summary empty", text: "Nothing stored yet" })
     );
 
     const editBtn = h(
@@ -1105,11 +1296,11 @@ class BilresaRemoteEditor extends HTMLElement {
       {
         type: "button",
         class: "btn small primary",
-        "aria-label": `${label} ${scope} bearbeiten`,
+        "aria-label": `Edit ${label} ${scope}`,
         onclick: () => this._openDialog(modeKey, action),
       },
       icon("pencil"),
-      h("span", { text: binding ? "Bearbeiten" : "Belegen" })
+      h("span", { text: binding ? "Edit" : "Assign" })
     );
 
     const testBtn = h(
@@ -1118,12 +1309,12 @@ class BilresaRemoteEditor extends HTMLElement {
         type: "button",
         class: "btn small",
         disabled: !binding,
-        title: binding ? "Aktion einmal ausführen" : "Erst eine Aktion hinterlegen",
-        "aria-label": `${label} ${scope} testen`,
+        title: binding ? "Run this action once" : "Assign an action first",
+        "aria-label": `Test ${label} ${scope}`,
         onclick: (event) => this._test(modeKey, action, event.currentTarget),
       },
       icon("play"),
-      h("span", { text: "Testen" })
+      h("span", { text: "Test" })
     );
 
     const clearBtn = h(
@@ -1132,11 +1323,11 @@ class BilresaRemoteEditor extends HTMLElement {
         type: "button",
         class: "btn small danger",
         disabled: !binding,
-        "aria-label": `${label} ${scope} leeren`,
+        "aria-label": `Clear ${label} ${scope}`,
         onclick: (event) => this._armClear(event.currentTarget, modeKey, action, label),
       },
       icon("trash"),
-      h("span", { text: "Leeren" })
+      h("span", { text: "Clear" })
     );
 
     row.append(
@@ -1154,7 +1345,7 @@ class BilresaRemoteEditor extends HTMLElement {
     button.disabled = true;
     try {
       await testBinding(this._hass, this._remote.subentry_id, modeKey, action);
-      this._setStatus(`„${formatAction(action)}“ wurde einmal ausgeführt.`, "success");
+      this._setStatus(`“${actionTitle(action)}” ran once.`, "success");
     } catch (err) {
       this._setStatus(describeError(err), "error");
     } finally {
@@ -1170,12 +1361,12 @@ class BilresaRemoteEditor extends HTMLElement {
     }
     button.dataset.armed = "1";
     button.textContent = "";
-    button.append(icon("alert"), h("span", { text: "Wirklich?" }));
+    button.append(icon("alert"), h("span", { text: "Really?" }));
     setTimeout(() => {
       if (!button.isConnected || button.dataset.armed !== "1") return;
       button.dataset.armed = "0";
       button.textContent = "";
-      button.append(icon("trash"), h("span", { text: "Leeren" }));
+      button.append(icon("trash"), h("span", { text: "Clear" }));
     }, 4000);
   }
 
@@ -1189,7 +1380,7 @@ class BilresaRemoteEditor extends HTMLElement {
         if (!Object.keys(bindings[modeKey]).length) delete bindings[modeKey];
       }
       this._signature = JSON.stringify(this._remote);
-      this._setStatus(`„${label}“ ist jetzt leer.`, "success");
+      this._setStatus(`“${label}” is empty now.`, "success");
       this._render();
       this._emitChanged();
     } catch (err) {
@@ -1201,6 +1392,7 @@ class BilresaRemoteEditor extends HTMLElement {
   /* ----------------------------------------------------------- modeless -- */
 
   _buildModeless() {
+    const groups = groupIdsOf(this._remote);
     const list = h("div", { class: "slots" });
     for (const action of ["double", "triple"]) {
       list.append(this._buildSlotRow(MODELESS_KEY, action));
@@ -1209,9 +1401,9 @@ class BilresaRemoteEditor extends HTMLElement {
         list.append(
           h("p", {
             class: "slot-note muted small",
-            text: `Für „${formatAction(action)}“ liegt zusätzlich etwas in ${leftovers
+            text: `“${actionTitle(action)}” also has something stored in ${leftovers
               .map((mode) => modeLabel(this._remote, mode))
-              .join(", ")}. Das greift nur, solange dieser Slot hier leer ist.`,
+              .join(", ")}. That only runs while this slot here is empty.`,
           })
         );
       }
@@ -1226,8 +1418,8 @@ class BilresaRemoteEditor extends HTMLElement {
         h(
           "div",
           null,
-          h("h2", { text: "Für alle Modi gemeinsam" }),
-          h("p", { text: "Doppel- und Dreifachklick gelten hier unabhängig vom eingestellten Modus." })
+          h("h2", { text: "Shared by all modes" }),
+          h("p", { text: "Double and triple click apply no matter which mode is selected." })
         )
       ),
       h(
@@ -1237,14 +1429,20 @@ class BilresaRemoteEditor extends HTMLElement {
         h(
           "div",
           null,
-          h("strong", { text: "Warum geht das nicht pro Modus?" }),
+          h("strong", { text: "Why is this not per mode?" }),
           h("p", {
             text:
-              "Einfacher Klick und Rad kommen als Groupcast an: im Funktelegramm steckt eine action_group, also die Gruppen-ID des gerade gewählten Kanals — daran erkennt Home Assistant den Modus. Doppel- und Dreifachklick sendet die Fernbedienung dagegen als Unicast, ganz ohne action_group. Im Payload steht schlicht nichts, woraus sich der Kanal ableiten ließe.",
+              `A single click and a wheel turn arrive as a groupcast: the frame carries an ` +
+              `action_group, the group id of the selected channel (${groups.join(", ")}), and that ` +
+              `is how Home Assistant recognises the mode. A double or triple click is sent as a ` +
+              `unicast instead, entirely without an action_group — the payload simply holds ` +
+              `nothing the channel could be derived from.`,
           }),
           h("p", {
             text:
-              "Deshalb liegen diese beiden Aktionen einmal für die ganze Fernbedienung hier. Wer sie trotzdem je Modus belegen will, schaltet unten „Mehrfachklicks modusunabhängig“ aus — dann wird der zuletzt bekannte Modus benutzt, was nach einem Kanalwechsel am Gerät auch daneben liegen kann.",
+              "That is why these two actions live here once for the whole remote. To bind them " +
+              "per mode anyway, switch “Mode-independent multiclicks” off further down — the last " +
+              "known mode is used then, which can be wrong for one press after a channel change.",
           })
         )
       ),
@@ -1260,6 +1458,258 @@ class BilresaRemoteEditor extends HTMLElement {
       if (this._binding(String(mode), action)) modes.push(mode);
     }
     return modes;
+  }
+
+  /* -------------------------------------------------------- mode source -- */
+
+  _buildModeSource() {
+    const remote = this._remote;
+    const groups = groupIdsOf(remote);
+    const selected = this._modeSource();
+    const effective = this._effectiveSource();
+    const sources =
+      this._config && Array.isArray(this._config.mode_sources) && this._config.mode_sources.length
+        ? this._config.mode_sources
+        : DEFAULT_MODE_SOURCES;
+    // Hybrid first: it is the default and the answer for anyone who is unsure.
+    const ordered = DEFAULT_MODE_SOURCES.filter((source) => sources.includes(source)).concat(
+      sources.filter((source) => !DEFAULT_MODE_SOURCES.includes(source))
+    );
+
+    const section = h("section", { class: "card pad-lg source" });
+
+    section.append(
+      h(
+        "div",
+        { class: "section-head tight" },
+        h(
+          "div",
+          null,
+          h("h2", { text: "Where the mode comes from" }),
+          h("p", {
+            text:
+              "The remote has three internal channels; the lower button switches them and the LED " +
+              "shows the active one. The only open question is how Home Assistant learns which " +
+              "one is on.",
+          })
+        ),
+        h("div", { class: "spacer" }),
+        h(
+          "button",
+          {
+            type: "button",
+            class: "btn small",
+            onclick: () => this._openGuide("sec-unlock"),
+          },
+          icon("help"),
+          h("span", { text: "How do I unlock the channels?" })
+        )
+      )
+    );
+
+    if (effective && effective !== selected) {
+      section.append(
+        h(
+          "div",
+          { class: "notice source-live" },
+          icon("info"),
+          h(
+            "div",
+            null,
+            h("strong", { text: `Currently using: ${modeSourceTitle(effective)}` }),
+            h("p", {
+              text:
+                effective === "device"
+                  ? "The remote's channels were detected, so the mode now comes straight from the " +
+                    "radio traffic. Hybrid switched over on its own and stays there."
+                  : `The setting says ${modeSourceTitle(selected)}, but ${modeSourceTitle(
+                      effective
+                    )} is what drives the mode right now.`,
+            })
+          )
+        )
+      );
+    }
+
+    const group = h("div", {
+      class: "source-options",
+      role: "radiogroup",
+      "aria-label": "Where the mode comes from",
+    });
+    for (const source of ordered) group.append(this._buildSourceOption(source, selected, effective, groups));
+    section.append(group);
+
+    return section;
+  }
+
+  _buildSourceOption(source, selected, effective, groups) {
+    const id = `${this._uid}-source-${source}`;
+    const active = source === selected;
+    const texts = {
+      device: {
+        summary:
+          `Home Assistant reads the channel out of the radio traffic: a single click and the ` +
+          `wheel are addressed to a group id (${groups.join(", ")}), and that id names the channel.`,
+        audience: "For remotes whose three channels were unlocked with Touchlink.",
+        iconName: "antenna",
+      },
+      internal: {
+        summary:
+          "The mode does not come from the remote at all. Home Assistant counts it up itself " +
+          "whenever the action picked below is triggered.",
+        audience: "For everyone who did not run the Touchlink procedure. The lower button has no effect.",
+        iconName: "cycle",
+      },
+      hybrid: {
+        summary:
+          "Starts out like Internal and switches over to Device on its own, the first time a " +
+          "second group id shows up.",
+        audience: "The default. Pick this if you are not sure.",
+        iconName: "swap",
+      },
+    };
+    const text = texts[source] || {
+      summary: "",
+      audience: "",
+      iconName: "info",
+    };
+
+    const option = h("div", { class: `source-option${active ? " is-active" : ""}` });
+
+    const input = h("input", {
+      type: "radio",
+      id,
+      name: `${this._uid}-source`,
+      value: source,
+      checked: active,
+      onchange: (event) => {
+        if (!event.target.checked) return;
+        this._focusSelector = `#${id}`;
+        this._patch({ mode_source: source });
+      },
+    });
+
+    const label = h(
+      "label",
+      { class: "source-label", for: id },
+      input,
+      h(
+        "span",
+        { class: "source-body" },
+        h(
+          "span",
+          { class: "source-title" },
+          icon(text.iconName, "source-icon"),
+          h("span", { text: modeSourceTitle(source) }),
+          source === "hybrid" ? h("span", { class: "chip neutral tiny", text: "default" }) : null,
+          active && effective === source
+            ? h("span", { class: "chip success tiny", text: "in use" })
+            : null,
+          active && effective !== source
+            ? h("span", { class: "chip warning tiny", text: `now: ${modeSourceTitle(effective)}` })
+            : null
+        ),
+        h("span", { class: "source-text", text: text.summary }),
+        h("span", { class: "source-for", text: text.audience })
+      )
+    );
+
+    option.append(label);
+    if (active) {
+      const extra = this._buildSourceExtra(source, effective);
+      if (extra) option.append(extra);
+    }
+    return option;
+  }
+
+  /** What the chosen source still needs — shown right next to the option. */
+  _buildSourceExtra(source, effective) {
+    // Hybrid that has already promoted itself behaves exactly like Device.
+    const usesDevice = source === "device" || (source === "hybrid" && effective === "device");
+    const wrap = h("div", { class: "source-extra" });
+
+    if (usesDevice) {
+      wrap.append(
+        h(
+          "div",
+          { class: "source-note" },
+          icon("check"),
+          h(
+            "div",
+            null,
+            h("strong", { text: "Nothing to set up" }),
+            h("p", {
+              class: "muted small",
+              text:
+                "The lower button switches the channel in the hardware itself and sends nothing " +
+                "over the air. The new channel shows up with the next click or wheel turn.",
+            })
+          )
+        )
+      );
+      return wrap;
+    }
+
+    const remote = this._remote;
+    const actions =
+      this._config && Array.isArray(this._config.actions) && this._config.actions.length
+        ? this._config.actions
+        : DEFAULT_ACTIONS;
+
+    if (source === "hybrid") {
+      wrap.append(
+        h("p", {
+          class: "hint",
+          text:
+            "No second group id has shown up yet, so Hybrid behaves exactly like Internal: the " +
+            "action below advances the mode.",
+        })
+      );
+    }
+
+    const grid = h("div", { class: "form-grid" });
+    grid.append(
+      h(
+        "div",
+        { class: "field" },
+        h("label", { for: `${this._uid}-cycle`, text: "Action that advances the mode" }),
+        h(
+          "select",
+          {
+            id: `${this._uid}-cycle`,
+            onchange: (event) => {
+              this._focusSelector = `#${this._uid}-cycle`;
+              this._patch({ mode_cycle_action: event.target.value });
+            },
+          },
+          actions.map((action) =>
+            h(
+              "option",
+              { value: action, selected: action === remote.mode_cycle_action },
+              actionTitle(action)
+            )
+          )
+        ),
+        h("span", {
+          class: "hint",
+          text: "This action counts the mode up. A script stored for it still runs as well.",
+        })
+      )
+    );
+    grid.append(
+      this._switchField(
+        `${this._uid}-wrap`,
+        "Start over at mode 1 after the last one",
+        "Off: it stops at the last mode.",
+        remote.cycle_wrap !== false,
+        (checked) => {
+          this._focusSelector = `#${this._uid}-wrap`;
+          this._patch({ cycle_wrap: checked });
+        }
+      )
+    );
+    wrap.append(grid);
+    return wrap;
   }
 
   /* ----------------------------------------------------------- settings -- */
@@ -1279,50 +1729,21 @@ class BilresaRemoteEditor extends HTMLElement {
         "summary",
         { class: "settings-summary" },
         icon("cog"),
-        h("span", { text: "Einstellungen" }),
+        h("span", { text: "Advanced settings" }),
         h("span", {
           class: "muted small",
-          text: "Modusquelle, Slots, Radbremse, Gruppen-IDs",
+          text: "Number of modes, wheel throttle, group ids",
         })
       )
     );
 
     const grid = h("div", { class: "settings-grid" });
-    const sources =
-      this._config && Array.isArray(this._config.mode_sources) && this._config.mode_sources.length
-        ? this._config.mode_sources
-        : DEFAULT_MODE_SOURCES;
-
-    const sourceSelect = h(
-      "select",
-      {
-        id: `${this._uid}-source`,
-        onchange: (event) => this._patch({ mode_source: event.target.value }),
-      },
-      sources.map((source) =>
-        h(
-          "option",
-          { value: source, selected: source === remote.mode_source },
-          MODE_SOURCE_LABELS[source] || source
-        )
-      )
-    );
 
     grid.append(
       h(
         "div",
         { class: "field" },
-        h("label", { for: `${this._uid}-source`, text: "Modusquelle" }),
-        sourceSelect,
-        h("span", { class: "hint", text: MODE_SOURCE_HINTS[remote.mode_source] || "" })
-      )
-    );
-
-    grid.append(
-      h(
-        "div",
-        { class: "field" },
-        h("label", { for: `${this._uid}-count`, text: "Anzahl Modi" }),
+        h("label", { for: `${this._uid}-count`, text: "Number of modes" }),
         h("input", {
           type: "number",
           id: `${this._uid}-count`,
@@ -1334,7 +1755,7 @@ class BilresaRemoteEditor extends HTMLElement {
         }),
         h("span", {
           class: "hint",
-          text: "Das Gehäuse zeigt drei Kanäle. Mehr Modi ergeben nur mit interner Umschaltung Sinn.",
+          text: "The housing has three channels. More modes only make sense with internal switching.",
         })
       )
     );
@@ -1343,7 +1764,7 @@ class BilresaRemoteEditor extends HTMLElement {
       h(
         "div",
         { class: "field" },
-        h("label", { for: `${this._uid}-throttle`, text: "Radbremse (ms)" }),
+        h("label", { for: `${this._uid}-throttle`, text: "Wheel throttle (ms)" }),
         h("input", {
           type: "number",
           id: `${this._uid}-throttle`,
@@ -1355,7 +1776,7 @@ class BilresaRemoteEditor extends HTMLElement {
         }),
         h("span", {
           class: "hint",
-          text: "Beim Drehen kommt ein Schwall Werte. So lange wird nach einem Lauf gewartet; der letzte Wert kommt trotzdem an.",
+          text: "A turn produces a burst of values. This is how long the next run waits; the last value still arrives.",
         })
       )
     );
@@ -1364,7 +1785,7 @@ class BilresaRemoteEditor extends HTMLElement {
       h(
         "div",
         { class: "field" },
-        h("label", { for: `${this._uid}-groups`, text: "Gruppen-IDs" }),
+        h("label", { for: `${this._uid}-groups`, text: "Group ids" }),
         h("input", {
           type: "text",
           id: `${this._uid}-groups`,
@@ -1376,7 +1797,7 @@ class BilresaRemoteEditor extends HTMLElement {
         }),
         h("span", {
           class: "hint",
-          text: "Die Gruppen der Kanäle aus Zigbee2MQTT, in der Reihenfolge Modus 1, 2, 3.",
+          text: "The Zigbee2MQTT groups of the channels, in the order mode 1, 2, 3. Only used by Device and Hybrid.",
         })
       )
     );
@@ -1385,8 +1806,8 @@ class BilresaRemoteEditor extends HTMLElement {
     switches.append(
       this._switchField(
         `${this._uid}-modeless`,
-        "Mehrfachklicks modusunabhängig",
-        "Doppel- und Dreifachklick gelten einmal für die ganze Fernbedienung. Aus: sie hängen am zuletzt bekannten Modus.",
+        "Mode-independent multiclicks",
+        "Double and triple click count once for the whole remote. Off: they follow the last known mode.",
         remote.modeless_multiclick !== false,
         (checked) => this._patch({ modeless_multiclick: checked })
       )
@@ -1394,76 +1815,14 @@ class BilresaRemoteEditor extends HTMLElement {
     switches.append(
       this._switchField(
         `${this._uid}-split`,
-        "Einfachklick aufteilen",
-        "Getrennte Slots für die „Ein“- und die „Aus“-Phase des Rads statt einem gemeinsamen Klick-Slot.",
+        "Split the single click",
+        "Separate slots for the “on” and the “off” phase of the wheel instead of one shared click slot.",
         remote.split_single_click === true,
         (checked) => this._patch({ split_single_click: checked })
       )
     );
 
-    const extra = h("div", { class: "settings-extra" });
-    if (remote.mode_source === "device") {
-      extra.append(
-        h(
-          "div",
-          { class: "notice warning" },
-          icon("info"),
-          h(
-            "div",
-            null,
-            h("strong", { text: "Umschalten passiert am Gerät" }),
-            h("p", {
-              text:
-                "Die untere Taste wechselt den Kanal in der Hardware und sendet dabei nichts an Home Assistant. Eine Aktion zum Weiterschalten ist deshalb nicht nötig — der neue Kanal fällt beim nächsten Klick oder Drehen an der Gruppen-ID auf.",
-            })
-          )
-        )
-      );
-    } else {
-      const actions =
-        this._config && Array.isArray(this._config.actions) && this._config.actions.length
-          ? this._config.actions
-          : DEFAULT_ACTIONS;
-      const cycleSelect = h(
-        "select",
-        {
-          id: `${this._uid}-cycle`,
-          onchange: (event) => this._patch({ mode_cycle_action: event.target.value }),
-        },
-        actions.map((action) =>
-          h(
-            "option",
-            { value: action, selected: action === remote.mode_cycle_action },
-            formatAction(action)
-          )
-        )
-      );
-      const cycleGrid = h("div", { class: "settings-grid" });
-      cycleGrid.append(
-        h(
-          "div",
-          { class: "field" },
-          h("label", { for: `${this._uid}-cycle`, text: "Aktion zum Weiterschalten" }),
-          cycleSelect,
-          h("span", {
-            class: "hint",
-            text: "Diese Aktion zählt den Modus weiter. Ein dafür hinterlegtes Skript läuft zusätzlich.",
-          })
-        )
-      );
-      cycleGrid.append(
-        this._switchField(
-          `${this._uid}-wrap`,
-          "Nach dem letzten Modus wieder bei 1 beginnen",
-          "Aus: beim letzten Modus bleibt es stehen.",
-          remote.cycle_wrap !== false,
-          (checked) => this._patch({ cycle_wrap: checked })
-        )
-      );
-      extra.append(cycleGrid);
-    }
-
-    details.append(h("div", { class: "settings-body" }, grid, switches, extra));
+    details.append(h("div", { class: "settings-body" }, grid, switches));
     return details;
   }
 
@@ -1491,12 +1850,12 @@ class BilresaRemoteEditor extends HTMLElement {
     const value = Math.round(Number(input.value));
     if (!Number.isFinite(value) || value < 1 || value > MAX_MODE_COUNT) {
       input.value = String(this._modeCount());
-      this._setStatus(`Die Anzahl der Modi muss zwischen 1 und ${MAX_MODE_COUNT} liegen.`, "error");
+      this._setStatus(`The number of modes has to be between 1 and ${MAX_MODE_COUNT}.`, "error");
       return;
     }
     if (value === this._modeCount()) return;
     const names = [];
-    for (let i = 1; i <= value; i += 1) names.push(modeNameOf(this._remote, i) || `Modus ${i}`);
+    for (let i = 1; i <= value; i += 1) names.push(modeNameOf(this._remote, i) || `Mode ${i}`);
     this._patch({ mode_count: value, mode_names: names });
   }
 
@@ -1505,7 +1864,7 @@ class BilresaRemoteEditor extends HTMLElement {
     const current = Number(this._remote.wheel_throttle_ms) || 0;
     if (!Number.isFinite(value) || value < 0 || value > 10000) {
       input.value = String(current);
-      this._setStatus("Die Radbremse muss zwischen 0 und 10000 ms liegen.", "error");
+      this._setStatus("The wheel throttle has to be between 0 and 10000 ms.", "error");
       return;
     }
     if (value === current) return;
@@ -1522,14 +1881,14 @@ class BilresaRemoteEditor extends HTMLElement {
       const value = Number(part);
       if (!Number.isInteger(value) || value < 0 || value > 0xffff) {
         input.value = current.join(", ");
-        this._setStatus(`„${part}“ ist keine gültige Gruppen-ID (0 bis 65535).`, "error");
+        this._setStatus(`“${part}” is not a valid group id (0 to 65535).`, "error");
         return;
       }
       ids.push(value);
     }
     if (!ids.length) {
       input.value = current.join(", ");
-      this._setStatus("Mindestens eine Gruppen-ID wird gebraucht.", "error");
+      this._setStatus("At least one group id is needed.", "error");
       return;
     }
     if (ids.length === current.length && ids.every((id, index) => id === current[index])) return;
@@ -1546,10 +1905,12 @@ class BilresaRemoteEditor extends HTMLElement {
       h(
         "div",
         { class: "danger-text" },
-        h("h2", { text: "Fernbedienung entfernen" }),
+        h("h2", { text: "Remove this remote" }),
         h("p", {
           class: "muted small",
-          text: `Löscht diese Fernbedienung samt ${bindingCount === 1 ? "einer hinterlegten Aktion" : `${bindingCount} hinterlegten Aktionen`}. Das Gerät selbst bleibt in Zigbee2MQTT bestehen und kann jederzeit neu eingerichtet werden.`,
+          text: `Deletes this remote together with ${
+            bindingCount === 1 ? "one stored action" : `${bindingCount} stored actions`
+          }. The device itself stays in Zigbee2MQTT and can be set up again at any time.`,
         })
       )
     );
@@ -1569,7 +1930,7 @@ class BilresaRemoteEditor extends HTMLElement {
             },
           },
           icon("trash"),
-          h("span", { text: "Löschen" })
+          h("span", { text: "Delete" })
         )
       );
       return section;
@@ -1578,8 +1939,11 @@ class BilresaRemoteEditor extends HTMLElement {
     section.append(
       h(
         "div",
-        { class: "confirm row wrap", role: "group", "aria-label": "Löschen bestätigen" },
-        h("span", { class: "confirm-text", text: `„${this._remote.name || this._remote.ieee}“ wirklich löschen?` }),
+        { class: "confirm row wrap", role: "group", "aria-label": "Confirm deletion" },
+        h("span", {
+          class: "confirm-text",
+          text: `Really delete “${this._remote.name || this._remote.ieee}”?`,
+        }),
         h(
           "button",
           {
@@ -1588,7 +1952,7 @@ class BilresaRemoteEditor extends HTMLElement {
             onclick: (event) => this._delete(event.currentTarget),
           },
           icon("trash"),
-          h("span", { text: "Ja, endgültig löschen" })
+          h("span", { text: "Yes, delete it" })
         ),
         h(
           "button",
@@ -1600,7 +1964,7 @@ class BilresaRemoteEditor extends HTMLElement {
               this._render();
             },
           },
-          h("span", { text: "Abbrechen" })
+          h("span", { text: "Cancel" })
         )
       )
     );
@@ -1641,12 +2005,12 @@ class BilresaRemoteEditor extends HTMLElement {
     dialog.action = action;
     dialog.context =
       modeKey === MODELESS_KEY
-        ? `${this._remote.name || this._remote.ieee} · für alle Modi`
+        ? `${this._remote.name || this._remote.ieee} · all modes`
         : `${this._remote.name || this._remote.ieee} · ${modeLabel(this._remote, Number(modeKey))}`;
     dialog.binding = binding ? { sequence: binding.sequence, script_mode: binding.script_mode } : null;
 
     dialog.addEventListener("saved", () => {
-      this._setStatus(`„${formatAction(action)}“ gespeichert.`, "success");
+      this._setStatus(`“${actionTitle(action)}” saved.`, "success");
       this._emitChanged();
     });
     dialog.addEventListener("dialog-closed", () => this._closeDialog());
@@ -1674,21 +2038,24 @@ const EDITOR_STYLES = `
   padding: 10px 14px;
   border-radius: var(--bil-radius-md);
   border-left: 3px solid var(--bil-accent);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-accent) 10%, var(--bil-surface));
-  font-size: 13px;
+  font-size: var(--bil-font-sm);
 }
 
 .editor-status.success {
   border-left-color: var(--bil-success);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-success) 12%, var(--bil-surface));
 }
 
 .editor-status.error {
   border-left-color: var(--bil-error);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-error) 12%, var(--bil-surface));
 }
 
-.section-head.tight { margin-bottom: 8px; align-items: center; }
+.section-head.tight { margin-bottom: var(--bil-space-2); align-items: center; }
 
 /* ----------------------------------------------------------------- head -- */
 
@@ -1699,83 +2066,96 @@ const EDITOR_STYLES = `
 .hero-fallback { position: relative; width: 100%; aspect-ratio: 200 / 330; }
 .hero-fallback img { width: 100%; height: 100%; object-fit: contain; display: block; }
 
+/* The LED row sits at cy 216 of the 330 unit tall illustration (65.45%), the
+   three LEDs at cx 82/100/118 of 200 — that is where the overlay dots have to
+   land while the <img> is on screen. */
 .hero-fallback .led-overlay { position: absolute; inset: 0; pointer-events: none; }
 .hero-fallback .led-overlay i {
   position: absolute;
-  top: 59.4%;
+  top: 65.45%;
   width: 6%;
   aspect-ratio: 1;
   border-radius: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(42, 42, 42, 0.55);
 }
 .hero-fallback .led-overlay i.on {
   background: var(--bil-led-on);
   box-shadow: 0 0 5px 2px rgba(255, 243, 208, 0.7);
 }
 
-.head-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.head-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--bil-space-3); }
 
 .title-input {
-  font-size: 24px;
+  font-size: var(--bil-font-2xl);
   font-weight: 700;
-  padding: 8px 12px;
+  padding: var(--bil-space-2) var(--bil-space-3);
   border-color: transparent;
   background: transparent;
   min-height: 48px;
 }
 
-.title-input:hover { border-color: var(--divider-color, rgba(127, 127, 127, 0.28)); }
+.title-input:hover { border-color: var(--bil-line); }
 .title-input:focus { border-color: var(--bil-accent); background: var(--bil-surface); }
 
-.head-meta { margin: 0; font-size: 12px; color: var(--bil-text-dim); overflow-wrap: anywhere; }
-.head-chips { gap: 8px; }
+.head-meta { margin: 0; font-size: var(--bil-font-xs); color: var(--bil-text-dim); overflow-wrap: anywhere; }
+.head-chips { gap: var(--bil-space-2); }
 
-.swatch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.swatch-row { display: flex; align-items: center; gap: var(--bil-space-3); flex-wrap: wrap; }
 
 .swatch-label {
-  font-size: 12px;
+  font-size: var(--bil-font-xs);
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   color: var(--bil-text-dim);
 }
 
-.swatches { display: flex; align-items: center; gap: 6px; }
+.swatches { display: flex; align-items: center; gap: var(--bil-space-1); }
 
 .swatch {
   position: relative;
-  width: 44px;
-  height: 44px;
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--bil-control);
+  height: var(--bil-control);
+  padding: 0;
+  border: 2px solid transparent;
   border-radius: 50%;
   background: transparent;
   cursor: pointer;
-  padding: 0;
 }
 
-.swatch::before {
-  content: "";
-  position: absolute;
-  inset: 8px;
+/* Older revisions painted the housing colour into a pseudo element fed by a
+   custom property. The colour now comes from .swatch-dot, so any leftover
+   pseudo element rule must not generate a box on top of it. */
+.swatch::before, .swatch::after { content: none; }
+
+.swatch-dot {
+  display: block;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: var(--swatch);
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.2);
-  transition: inset 0.15s ease;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  transition: width 0.15s ease, height 0.15s ease;
 }
 
-.swatch::after {
-  content: "";
+.swatch:hover .swatch-dot { width: 30px; height: 30px; }
+
+.swatch-check {
   position: absolute;
-  inset: 2px;
-  border-radius: 50%;
-  border: 2px solid transparent;
-  transition: border-color 0.15s ease;
+  display: block;
+  width: 16px;
+  height: 16px;
+  pointer-events: none;
 }
 
-.swatch:hover::before { inset: 6px; }
-.swatch.is-active::after { border-color: var(--bil-accent); }
-.swatch:focus-visible { outline: 2px solid var(--bil-accent); outline-offset: 2px; }
+.swatch-check svg { width: 100%; height: 100%; display: block; fill: currentColor; }
+
+.swatch.is-active { border-color: var(--bil-accent); }
+.swatch.is-active .swatch-dot { width: 30px; height: 30px; }
+.swatch-current { text-transform: none; }
 
 /* ----------------------------------------------------------------- tabs -- */
 
@@ -1783,17 +2163,17 @@ const EDITOR_STYLES = `
 
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: var(--bil-space-2);
   border-bottom: var(--bil-border);
-  padding-bottom: 8px;
+  padding-bottom: var(--bil-space-2);
   min-width: min-content;
 }
 
 .tab {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
+  gap: var(--bil-space-2);
+  min-height: var(--bil-control);
   padding: 0 14px;
   border: var(--bil-border);
   border-radius: var(--bil-pill);
@@ -1814,8 +2194,6 @@ const EDITOR_STYLES = `
   color: var(--bil-on-accent);
 }
 
-.tab:focus-visible { outline: 2px solid var(--bil-accent); outline-offset: 2px; }
-
 .tab-index {
   display: inline-flex;
   align-items: center;
@@ -1823,8 +2201,9 @@ const EDITOR_STYLES = `
   min-width: 22px;
   height: 22px;
   border-radius: var(--bil-pill);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 12%, transparent);
-  font-size: 12px;
+  font-size: var(--bil-font-xs);
 }
 
 .tab.is-selected .tab-index { background: rgba(255, 255, 255, 0.25); }
@@ -1834,6 +2213,7 @@ const EDITOR_STYLES = `
   height: 10px;
   border-radius: 50%;
   background: var(--bil-success);
+  box-shadow: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--bil-success) 30%, transparent);
 }
 
@@ -1841,24 +2221,23 @@ const EDITOR_STYLES = `
 .tab.is-current.is-selected { border-color: transparent; }
 
 .tab-rename {
-  min-height: 44px;
+  min-height: var(--bil-control);
   width: 200px;
   border-radius: var(--bil-pill);
-  padding: 0 16px;
+  padding: 0 var(--bil-space-4);
 }
 
 .tabpanel { padding-top: var(--bil-gap); }
-.tabpanel:focus-visible { outline: 2px solid var(--bil-accent); outline-offset: 4px; }
 
 /* ---------------------------------------------------------------- slots -- */
 
-.slots { display: flex; flex-direction: column; gap: 10px; }
+.slots { display: flex; flex-direction: column; gap: var(--bil-space-3); }
 
 .slot {
   display: flex;
   align-items: center;
   gap: var(--bil-gap);
-  padding: 12px 14px;
+  padding: var(--bil-space-3) 14px;
   border: var(--bil-border);
   border-radius: var(--bil-radius-md);
   background: var(--bil-surface);
@@ -1867,6 +2246,7 @@ const EDITOR_STYLES = `
 
 .slot.is-empty {
   border-style: dashed;
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 3%, transparent);
 }
 
@@ -1884,24 +2264,131 @@ const EDITOR_STYLES = `
 .slot.is-empty .slot-icon { color: var(--bil-text-dim); }
 
 .slot-main { flex: 1 1 auto; min-width: 0; }
-.slot-title { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.slot-title { display: flex; align-items: center; gap: var(--bil-space-2); font-weight: 600; }
 .slot-sub { margin: 2px 0 0; }
 
 .slot-summary {
-  margin: 4px 0 0;
+  margin: var(--bil-space-1) 0 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .slot-summary.empty { color: var(--bil-text-dim); font-style: italic; }
-.slot-actions { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
+.slot-actions { display: flex; align-items: center; gap: var(--bil-space-2); flex: none; flex-wrap: wrap; justify-content: flex-end; }
 .slot-note { margin: 0 2px; }
 
-.chip.tiny { font-size: 11px; padding: 1px 8px; }
+.chip.tiny { font-size: var(--bil-font-2xs); padding: 1px var(--bil-space-2); }
 
 .notice.explain { align-items: flex-start; }
-.notice.explain p + p { margin-top: 8px; }
+.notice.explain p + p { margin-top: var(--bil-space-2); }
+
+/* ---------------------------------------------------------- mode source -- */
+
+/* One card per row instead of a track: only the selected card carries extra
+   controls, and a grid would leave a ragged hole next to it. */
+.source-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bil-space-3);
+}
+
+.source-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bil-space-3);
+  padding: var(--bil-space-4);
+  border: var(--bil-border);
+  border-radius: var(--bil-radius-md);
+  background: var(--bil-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.source-option:hover { border-color: color-mix(in srgb, var(--bil-accent) 45%, var(--bil-line)); }
+
+.source-option.is-active {
+  border-color: var(--bil-accent);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
+  background: color-mix(in srgb, var(--bil-accent) 7%, var(--bil-surface));
+}
+
+.source-label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--bil-space-3);
+  min-height: var(--bil-control);
+  cursor: pointer;
+}
+
+.source-label input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 2px 0 0;
+  min-height: 0;
+  padding: 0;
+  border: 2px solid var(--bil-text-dim);
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.source-label input:checked {
+  border-color: var(--bil-accent);
+  box-shadow: inset 0 0 0 4px var(--bil-accent);
+}
+
+.source-body { display: flex; flex-direction: column; gap: var(--bil-space-1); min-width: 0; }
+
+.source-title {
+  display: flex;
+  align-items: center;
+  gap: var(--bil-space-2);
+  flex-wrap: wrap;
+  font-size: var(--bil-font-lg);
+  font-weight: 600;
+  line-height: var(--bil-line-snug);
+}
+
+.source-title .source-icon { width: 18px; height: 18px; color: var(--bil-accent); }
+
+.source-text {
+  font-size: var(--bil-font-sm);
+  line-height: var(--bil-line-normal);
+  color: var(--bil-text-dim);
+  max-width: 62ch;
+}
+
+.source-for {
+  font-size: var(--bil-font-xs);
+  line-height: var(--bil-line-snug);
+  color: var(--bil-text-soft);
+  max-width: 62ch;
+}
+
+.source-extra {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bil-space-3);
+  padding-top: var(--bil-space-3);
+  border-top: var(--bil-border);
+}
+
+.source-note { display: flex; align-items: flex-start; gap: var(--bil-space-3); }
+.source-note .icon { flex: none; margin-top: 1px; color: var(--bil-success); }
+.source-note p { margin-top: 2px; max-width: 68ch; }
+
+.notice.source-live {
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
+  background: color-mix(in srgb, var(--bil-accent) 10%, var(--bil-surface));
+  border-left-color: var(--bil-accent);
+  margin-bottom: var(--bil-space-4);
+}
+
+.notice.source-live .icon { color: var(--bil-accent); }
 
 /* ------------------------------------------------------------- settings -- */
 
@@ -1910,8 +2397,8 @@ const EDITOR_STYLES = `
 .settings-summary {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 16px var(--bil-gap);
+  gap: var(--bil-space-3);
+  padding: var(--bil-space-4) var(--bil-gap);
   min-height: 56px;
   cursor: pointer;
   font-weight: 600;
@@ -1921,7 +2408,6 @@ const EDITOR_STYLES = `
 
 .settings-summary::-webkit-details-marker { display: none; }
 .settings-summary:hover { background: color-mix(in srgb, var(--bil-text) 5%, transparent); }
-.settings-summary:focus-visible { outline: 2px solid var(--bil-accent); outline-offset: -2px; }
 .settings[open] .settings-summary { border-bottom: var(--bil-border); border-radius: var(--bil-radius-lg) var(--bil-radius-lg) 0 0; }
 
 .settings-body {
@@ -1933,14 +2419,14 @@ const EDITOR_STYLES = `
 
 .settings-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   gap: var(--bil-gap);
   align-items: start;
 }
 
 .settings-switches { display: flex; flex-direction: column; gap: var(--bil-gap); }
 
-.switch-field { display: flex; align-items: flex-start; gap: 12px; }
+.switch-field { display: flex; align-items: flex-start; gap: var(--bil-space-3); }
 .switch-text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .switch-label { font-weight: 600; cursor: pointer; }
 
@@ -1950,7 +2436,7 @@ const EDITOR_STYLES = `
   display: inline-flex;
   align-items: center;
   width: 52px;
-  height: 44px;
+  height: var(--bil-control);
   cursor: pointer;
 }
 
@@ -1968,6 +2454,7 @@ const EDITOR_STYLES = `
   width: 46px;
   height: 26px;
   border-radius: var(--bil-pill);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 22%, transparent);
   transition: background-color 0.18s ease;
   pointer-events: none;
@@ -1990,8 +2477,6 @@ const EDITOR_STYLES = `
 .switch input:checked + .switch-track::after { transform: translateX(20px); }
 .switch input:focus-visible + .switch-track { outline: 2px solid var(--bil-accent); outline-offset: 2px; }
 
-.settings-extra { display: flex; flex-direction: column; gap: var(--bil-gap); }
-
 /* --------------------------------------------------------------- danger -- */
 
 .danger {
@@ -1999,13 +2484,14 @@ const EDITOR_STYLES = `
   align-items: center;
   gap: var(--bil-gap);
   flex-wrap: wrap;
+  border: 1px solid var(--divider-color, rgba(127,127,127,.3)) 35%, transparent);
   border: 1px solid color-mix(in srgb, var(--bil-error) 35%, transparent);
 }
 
 .danger-text { flex: 1 1 320px; min-width: 0; }
-.danger-text h2 { margin: 0; font-size: 15px; font-weight: 600; }
-.danger-text p { margin: 4px 0 0; }
-.danger .confirm { gap: 10px; }
+.danger-text h2 { margin: 0; font-size: var(--bil-font-lg); font-weight: 600; }
+.danger-text p { margin: var(--bil-space-1) 0 0; }
+.danger .confirm { gap: var(--bil-space-3); }
 .danger .confirm-text { font-weight: 600; }
 
 /* ----------------------------------------------------------- responsive -- */
@@ -2013,7 +2499,7 @@ const EDITOR_STYLES = `
 @media (max-width: 700px) {
   .head { flex-direction: row; gap: var(--bil-gap); }
   .hero { width: 76px; }
-  .title-input { font-size: 20px; }
+  .title-input { font-size: var(--bil-font-xl); }
   .slot { flex-wrap: wrap; }
   .slot-main { flex: 1 1 100%; order: 2; }
   .slot .slot-icon { order: 1; }

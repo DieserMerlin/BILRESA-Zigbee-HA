@@ -25,7 +25,7 @@ import {
 
 const IMAGE_BASE = "/bilresa_remote/images";
 const DEFAULT_COLORS = ["red", "beige", "green"];
-const COLOR_LABELS = { red: "Rot", beige: "Beige", green: "Grün" };
+const COLOR_LABELS = { red: "Red", beige: "Beige", green: "Green" };
 
 const ICONS = {
   menu: "M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2z",
@@ -50,6 +50,19 @@ const ICONS = {
 
 /* ------------------------------------------------------------- helpers -- */
 
+/**
+ * Apply a style object. Custom properties have to go through setProperty —
+ * assigning them onto the CSSStyleDeclaration is silently ignored, which is
+ * how "--swatch"-style values end up unset.
+ */
+function setStyle(node, styles) {
+  for (const [prop, value] of Object.entries(styles)) {
+    if (value === undefined || value === null) continue;
+    if (prop.startsWith("--")) node.style.setProperty(prop, String(value));
+    else node.style[prop] = value;
+  }
+}
+
 function h(tag, props, ...children) {
   const node = document.createElement(tag);
   if (props) {
@@ -58,7 +71,7 @@ function h(tag, props, ...children) {
       if (key === "class") node.className = value;
       else if (key === "text") node.textContent = value;
       else if (key === "html") node.innerHTML = value;
-      else if (key === "style" && typeof value === "object") Object.assign(node.style, value);
+      else if (key === "style" && typeof value === "object") setStyle(node, value);
       else if (key.startsWith("on") && typeof value === "function")
         node.addEventListener(key.slice(2), value);
       else node.setAttribute(key, value === true ? "" : String(value));
@@ -283,8 +296,8 @@ class BilresaPanel extends HTMLElement {
     this._menuBtn = h("button", {
       type: "button",
       class: "icon-btn",
-      title: "Menü",
-      "aria-label": "Menü öffnen",
+      title: "Menu",
+      "aria-label": "Open the sidebar",
       hidden: true,
       onclick: () => this.dispatchEvent(new CustomEvent("hass-toggle-menu", { bubbles: true, composed: true })),
     }, icon("menu"));
@@ -292,8 +305,8 @@ class BilresaPanel extends HTMLElement {
     this._backBtn = h("button", {
       type: "button",
       class: "icon-btn",
-      title: "Zurück zur Übersicht",
-      "aria-label": "Zurück zur Übersicht",
+      title: "Back to the overview",
+      "aria-label": "Back to the overview",
       hidden: true,
       onclick: () => this._navigate("/"),
     }, icon("back"));
@@ -304,14 +317,16 @@ class BilresaPanel extends HTMLElement {
     this._guideBtn = h("button", {
       type: "button",
       class: "btn ghost small",
+      title: "Open the guide",
+      "aria-label": "Open the guide",
       onclick: () => this._navigate("/guide"),
-    }, icon("help"), h("span", { text: "Anleitung" }));
+    }, icon("help"), h("span", { class: "btn-label", text: "Guide" }));
 
     this._refreshBtn = h("button", {
       type: "button",
       class: "icon-btn",
-      title: "Aktualisieren",
-      "aria-label": "Aktualisieren",
+      title: "Reload",
+      "aria-label": "Reload",
       onclick: () => this._reload({ manual: true }),
     }, icon("refresh"));
 
@@ -320,8 +335,9 @@ class BilresaPanel extends HTMLElement {
       { class: "topbar" },
       this._menuBtn,
       this._backBtn,
+      // .titles carries the flex-grow, so no extra spacer is needed and the
+      // title can shrink to an ellipsis instead of pushing the actions out.
       h("div", { class: "titles" }, this._title, this._subtitle),
-      h("div", { class: "spacer" }),
       h("div", { class: "topbar-actions" }, this._guideBtn, this._refreshBtn)
     );
 
@@ -343,22 +359,22 @@ class BilresaPanel extends HTMLElement {
     if (!this._subtitle) return;
 
     if (view === "guide") {
-      this._subtitle.textContent = "Anleitung";
+      this._subtitle.textContent = "Guide";
       return;
     }
     if (view === "remote") {
       const remote = this._remoteById(id);
-      this._subtitle.textContent = remote ? remote.name || remote.ieee : "Fernbedienung";
+      this._subtitle.textContent = remote ? remote.name || remote.ieee : "Remote";
       return;
     }
     const config = this._state.config;
     if (!config) {
-      this._subtitle.textContent = "Fernbedienungen einrichten";
+      this._subtitle.textContent = "Set up your remotes";
       return;
     }
     const count = (config.remotes || []).length;
-    const label = count === 1 ? "1 Fernbedienung" : `${count} Fernbedienungen`;
-    this._subtitle.textContent = `${label} · Basis-Topic „${config.base_topic || "zigbee2mqtt"}“`;
+    const label = count === 1 ? "1 remote" : `${count} remotes`;
+    this._subtitle.textContent = `${label} · base topic “${config.base_topic || "zigbee2mqtt"}”`;
   }
 
   /* ------------------------------------------------------------ routing -- */
@@ -452,7 +468,7 @@ class BilresaPanel extends HTMLElement {
       const result = await createRemote(this._hass, payload);
       if (device) device.configured = true;
       await this._reload({ silent: true });
-      this._toast("Fernbedienung angelegt.", "success");
+      this._toast("Remote created.", "success");
       if (result && result.subentry_id) {
         this._navigate(`/remote/${encodeURIComponent(result.subentry_id)}`);
       }
@@ -538,49 +554,51 @@ class BilresaPanel extends HTMLElement {
     bar.classList.toggle("is-live", Boolean(event));
     bar.append(h("span", { class: "pulse" }));
 
+    // Layout order is always: pulse · headline (flexible) · hint · time · chip.
+    // The headline is the only element allowed to grow or shrink, so nothing
+    // can ever be pushed out of the strip.
     if (this._state.liveError) {
       bar.append(
-        h("span", { class: "live-text", text: "Live-Anzeige nicht verfügbar" }),
-        h("span", { class: "live-meta", text: this._state.liveError })
+        h("span", { class: "live-text", text: "Live view unavailable" }),
+        h("span", { class: "live-hint", text: this._state.liveError })
       );
       return;
     }
 
     if (!event) {
       bar.append(
-        h("span", { class: "live-text muted", text: "Warte auf einen Tastendruck …" }),
+        h("span", { class: "live-text muted", text: "Waiting for a button press …" }),
         h("span", {
-          class: "live-meta",
-          text: "Drücke das Rad, um zu sehen welche Fernbedienung ankommt.",
+          class: "live-hint",
+          text: "Press the wheel to see which remote comes in.",
         })
       );
       return;
     }
 
     const remote = this._remoteById(event.subentry_id);
-    const name = (remote && remote.name) || event.ieee || "Unbekannte Fernbedienung";
+    const name = (remote && remote.name) || event.ieee || "Unknown remote";
     const parts = [name];
     if (event.mode_key === MODELESS_KEY) {
-      parts.push("modusunabhängig");
+      parts.push("any mode");
     } else if (event.mode) {
       const label = remote ? modeName(remote, event.mode) : "";
-      parts.push(label ? `Modus ${event.mode} · ${label}` : `Modus ${event.mode}`);
+      parts.push(label ? `Mode ${event.mode} · ${label}` : `Mode ${event.mode}`);
     }
     parts.push(formatAction(event.action));
     if (event.action === "wheel") {
       if (event.level_pct !== undefined && event.level_pct !== null) {
         parts.push(`${event.level_pct} %`);
       }
-      if (event.direction) parts.push(event.direction === "down" ? "abwärts" : "aufwärts");
+      if (event.direction) parts.push(event.direction === "down" ? "down" : "up");
     }
 
     bar.append(h("span", { class: "live-text", text: parts.join(" · ") }));
-    bar.append(h("span", { class: "live-meta", text: formatTime(event.timestamp) }));
-    bar.append(h("span", { class: "spacer" }));
+    bar.append(h("span", { class: "live-time", text: formatTime(event.timestamp) }));
     bar.append(
       event.has_binding === false
-        ? h("span", { class: "chip warning" }, icon("alert"), h("span", { text: "kein Skript" }))
-        : h("span", { class: "chip success" }, icon("check"), h("span", { text: "Skript läuft" }))
+        ? h("span", { class: "chip warning" }, icon("alert"), h("span", { text: "no script" }))
+        : h("span", { class: "chip success" }, icon("check"), h("span", { text: "script runs" }))
     );
 
     if (flash) {
@@ -666,13 +684,14 @@ class BilresaPanel extends HTMLElement {
       this._content.append(
         this._emptyCard(
           "remote",
-          "Diese Fernbedienung gibt es nicht mehr.",
-          "Sie wurde vermutlich gelöscht. Zurück zur Übersicht, um eine andere zu wählen.",
+          "This remote no longer exists",
+          "It was most likely deleted. Go back to the overview to pick another one.",
           [
             h(
               "button",
               { type: "button", class: "btn primary", onclick: () => this._navigate("/") },
-              h("span", { text: "Zur Übersicht" })
+              icon("back"),
+              h("span", { text: "Back to the overview" })
             ),
           ]
         )
@@ -704,10 +723,9 @@ class BilresaPanel extends HTMLElement {
             h(
               "div",
               null,
-              h("h2", { text: "Deine Fernbedienungen" }),
-              h("p", { text: "Tippe auf eine Karte, um Modi und Aktionen zu bearbeiten." })
-            ),
-            h("div", { class: "spacer" })
+              h("h2", { text: "Your remotes" }),
+              h("p", { text: "Open a card to edit its modes and actions." })
+            )
           ),
           h("div", { id: "remotes" })
         ),
@@ -742,20 +760,20 @@ class BilresaPanel extends HTMLElement {
       host.append(
         this._emptyCard(
           "remote",
-          "Noch keine Fernbedienung eingerichtet",
-          "Suche unten nach BILRESA-Fernbedienungen in Zigbee2MQTT oder trage die IEEE-Adresse von Hand ein. Die Anleitung erklärt, wie Rad, Modi und Slots zusammenspielen.",
+          "No remote set up yet",
+          "Search Zigbee2MQTT for BILRESA remotes below, or type an IEEE address by hand. The guide explains how the wheel, the modes and the slots fit together.",
           [
             h(
               "button",
               { type: "button", class: "btn primary", onclick: () => this._runDiscovery(true) },
               icon("search"),
-              h("span", { text: "Jetzt suchen" })
+              h("span", { text: "Search now" })
             ),
             h(
               "button",
               { type: "button", class: "btn", onclick: () => this._navigate("/guide") },
               icon("help"),
-              h("span", { text: "Anleitung öffnen" })
+              h("span", { text: "Open the guide" })
             ),
           ]
         )
@@ -779,7 +797,7 @@ class BilresaPanel extends HTMLElement {
       "div",
       { class: "row wrap" },
       h("span", { class: "chip" }, icon("wheel"), h("span", {
-        text: name ? `Modus ${mode} · ${name}` : `Modus ${mode}`,
+        text: name ? `Mode ${mode} · ${name}` : `Mode ${mode}`,
       })),
       available
         ? null
@@ -789,24 +807,29 @@ class BilresaPanel extends HTMLElement {
     const foot = h(
       "div",
       { class: "remote-foot" },
-      h("span", { class: "small muted", text: `${stats.used} von ${stats.total} Slots belegt` })
+      h("span", { text: `${stats.used} of ${stats.total} slots in use` })
     );
 
-    const bar = h("div", { class: "slotbar" }, h("span", { style: { width: `${percent}%` } }));
+    // The number above already says it; the bar is decoration for the eye.
+    const bar = h(
+      "div",
+      { class: "slotbar", "aria-hidden": "true" },
+      h("span", { style: { width: `${percent}%` } })
+    );
 
     return h(
       "button",
       {
         type: "button",
         class: "card remote-card",
-        "aria-label": `${remote.name || remote.ieee} bearbeiten`,
+        "aria-label": `Edit ${remote.name || remote.ieee}`,
         onclick: () => this._navigate(`/remote/${encodeURIComponent(remote.subentry_id)}`),
       },
       remoteVisual(remote.color, mode, remote.mode_count),
       h(
         "div",
         { class: "remote-body" },
-        h("h3", { class: "remote-name", text: remote.name || "Ohne Namen" }),
+        h("h3", { class: "remote-name", text: remote.name || "Unnamed remote" }),
         h("p", { class: "remote-meta", text: remote.ieee || "" }),
         chips,
         foot,
@@ -825,7 +848,7 @@ class BilresaPanel extends HTMLElement {
       "button",
       { type: "button", class: "btn primary", onclick: () => this._runDiscovery(true) },
       icon("search"),
-      h("span", { text: "Suchen" })
+      h("span", { text: "Search" })
     );
     this._searchBtn = searchBtn;
 
@@ -837,6 +860,7 @@ class BilresaPanel extends HTMLElement {
       spellcheck: "false",
       autocomplete: "off",
       autocapitalize: "off",
+      "aria-describedby": "manual-ieee-hint",
       value: this._manual.ieee,
       oninput: (event) => {
         this._manual.ieee = event.target.value;
@@ -854,7 +878,7 @@ class BilresaPanel extends HTMLElement {
     const nameInput = h("input", {
       type: "text",
       id: "manual-name",
-      placeholder: "z. B. Küche",
+      placeholder: "e.g. Kitchen",
       value: this._manual.name,
       oninput: (event) => {
         this._manual.name = event.target.value;
@@ -876,7 +900,8 @@ class BilresaPanel extends HTMLElement {
 
     this._manualHint = h("div", {
       class: "hint",
-      text: "Steht in Zigbee2MQTT auf der Geräteseite als „IEEE Address“.",
+      id: "manual-ieee-hint",
+      text: "Zigbee2MQTT shows it on the device page as “IEEE Address”.",
     });
 
     return h(
@@ -888,29 +913,33 @@ class BilresaPanel extends HTMLElement {
         h(
           "div",
           null,
-          h("h2", { text: "Fernbedienung hinzufügen" }),
+          h("h2", { text: "Add a remote" }),
           h("p", {
-            text: "Zigbee2MQTT nach BILRESA-Fernbedienungen fragen — der Kommentar aus Z2M hilft beim Auseinanderhalten.",
+            text: "Ask Zigbee2MQTT for BILRESA remotes — the comment stored in Z2M helps to tell them apart.",
           })
         ),
         h("div", { class: "spacer" }),
         searchBtn
       ),
+      // Card head, body and foot share the same horizontal raster, so the
+      // discovery results and the manual form line up on one grid.
       h(
         "div",
-        { class: "card pad-lg stack" },
-        h("div", { id: "discovery" }),
+        { class: "card flush" },
+        h("div", { class: "card-body", id: "discovery" }),
         h(
           "div",
-          { class: "stack tight" },
-          h("h3", { class: "small muted", text: "ODER MANUELL EINTRAGEN" }),
+          { class: "card-foot stack" },
+          h("h3", { class: "eyebrow", text: "Or enter it manually" }),
+          // A grid with align-items: start — the hint under the IEEE field
+          // must not drag the other inputs out of line.
           h(
             "div",
-            { class: "inline-form" },
+            { class: "form-grid" },
             h(
               "div",
               { class: "field" },
-              h("label", { for: "manual-ieee", text: "IEEE-Adresse" }),
+              h("label", { for: "manual-ieee", text: "IEEE address" }),
               ieeeInput,
               this._manualHint
             ),
@@ -923,14 +952,18 @@ class BilresaPanel extends HTMLElement {
             h(
               "div",
               { class: "field" },
-              h("label", { for: "manual-color", text: "Gehäusefarbe" }),
+              h("label", { for: "manual-color", text: "Housing colour" }),
               colorSelect
-            ),
+            )
+          ),
+          h(
+            "div",
+            { class: "form-actions" },
             h(
               "button",
               { type: "button", class: "btn primary", onclick: () => this._submitManual() },
               icon("plus"),
-              h("span", { text: "Hinzufügen" })
+              h("span", { text: "Add remote" })
             )
           )
         )
@@ -942,7 +975,7 @@ class BilresaPanel extends HTMLElement {
     if (!this._manualHint) return;
     if (!message) {
       this._manualHint.className = "hint";
-      this._manualHint.textContent = "Steht in Zigbee2MQTT auf der Geräteseite als „IEEE Address“.";
+      this._manualHint.textContent = "Zigbee2MQTT shows it on the device page as “IEEE Address”.";
       return;
     }
     this._manualHint.className = isError ? "hint error" : "hint";
@@ -952,13 +985,13 @@ class BilresaPanel extends HTMLElement {
   _submitManual() {
     const raw = (this._manual.ieee || "").trim();
     if (!raw) {
-      this._setManualHint("Bitte eine IEEE-Adresse eintragen.");
+      this._setManualHint("Please enter an IEEE address.");
       if (this._ieeeInput) this._ieeeInput.focus();
       return;
     }
     const ieee = normalizeIeee(raw);
     if (!isValidIeee(ieee)) {
-      this._setManualHint("Das ist keine gültige IEEE-Adresse (0x + 16 Hex-Zeichen).");
+      this._setManualHint("That is not a valid IEEE address (0x plus 16 hex characters).");
       if (this._ieeeInput) this._ieeeInput.focus();
       return;
     }
@@ -981,35 +1014,51 @@ class BilresaPanel extends HTMLElement {
       this._searchBtn.textContent = "";
       this._searchBtn.append(
         icon("search", state.discovering ? "spin" : ""),
-        h("span", { text: state.discovering ? "Suche …" : "Suchen" })
+        h("span", { text: state.discovering ? "Searching …" : "Search" })
       );
     }
 
+    // Loading, "nothing found" and the two notices all render into a
+    // .placeholder of the same reserved height, so the card below never jumps.
     if (state.discovering) {
-      host.append(this._skeletonGrid(2));
+      host.append(
+        h(
+          "div",
+          { class: "placeholder" },
+          h("div", { class: "skeleton line mid" }),
+          h("div", { class: "skeleton line short" })
+        )
+      );
       return;
     }
     if (state.discoverError) {
       host.append(
-        this._noticeCard(state.discoverError, true, () => this._runDiscovery(true))
+        h(
+          "div",
+          { class: "placeholder" },
+          this._noticeCard(state.discoverError, true, () => this._runDiscovery(true))
+        )
       );
       return;
     }
     if (!state.discovery) {
       host.append(
-        h("p", {
-          class: "muted small",
-          text: "Noch nicht gesucht. „Suchen“ fragt Zigbee2MQTT nach allen bekannten Geräten.",
-        })
+        h("div", { class: "placeholder" }, h("p", {
+          text: "Not searched yet. “Search” asks Zigbee2MQTT for every device it knows about.",
+        }))
       );
       return;
     }
     if (state.discovery.z2m_available === false) {
       host.append(
-        this._noticeCard(
-          "Zigbee2MQTT hat nicht geantwortet. Prüfe die MQTT-Verbindung oder trage die IEEE-Adresse unten von Hand ein.",
-          false,
-          () => this._runDiscovery(true)
+        h(
+          "div",
+          { class: "placeholder" },
+          this._noticeCard(
+            "Zigbee2MQTT did not answer. Check the MQTT connection, or enter the IEEE address by hand below.",
+            false,
+            () => this._runDiscovery(true)
+          )
         )
       );
       return;
@@ -1018,10 +1067,9 @@ class BilresaPanel extends HTMLElement {
     const devices = (state.discovery.devices || []).filter((device) => !device.configured);
     if (!devices.length) {
       host.append(
-        h("p", {
-          class: "muted small",
-          text: "Alle gefundenen BILRESA-Fernbedienungen sind bereits eingerichtet.",
-        })
+        h("div", { class: "placeholder" }, h("p", {
+          text: "Every BILRESA remote that was found is already set up.",
+        }))
       );
       return;
     }
@@ -1040,7 +1088,7 @@ class BilresaPanel extends HTMLElement {
         type: "button",
         class: "card outline remote-card",
         disabled: this._creating,
-        "aria-label": `${title} einrichten`,
+        "aria-label": `Set up ${title}`,
         onclick: () =>
           this._createRemote(
             {
@@ -1066,7 +1114,7 @@ class BilresaPanel extends HTMLElement {
         h(
           "div",
           { class: "remote-foot" },
-          h("span", { class: "small muted", text: "Tippen, um einzurichten" })
+          h("span", { text: "Select to set it up" })
         )
       )
     );
@@ -1074,13 +1122,18 @@ class BilresaPanel extends HTMLElement {
 
   /* ------------------------------------------------------------ pieces -- */
 
+  /**
+   * Placeholder cards for the remote grid. They reuse .remote-card, so the
+   * skeleton occupies exactly the height of the finished card and the layout
+   * does not shift once the data arrives.
+   */
   _skeletonGrid(count) {
     const grid = h("div", { class: "grid" });
     for (let i = 0; i < count; i += 1) {
       grid.append(
         h(
           "div",
-          { class: "card remote-card" },
+          { class: "card remote-card", "aria-hidden": "true" },
           h("div", { class: "remote-visual skeleton" }),
           h(
             "div",
@@ -1096,6 +1149,8 @@ class BilresaPanel extends HTMLElement {
   }
 
   _noticeCard(message, isError = true, retry) {
+    // The text block carries flex-grow, so the retry button is pushed right
+    // without a spacer element that would also stretch on a wrapped row.
     const node = h(
       "div",
       { class: isError ? "notice" : "notice warning" },
@@ -1103,18 +1158,17 @@ class BilresaPanel extends HTMLElement {
       h(
         "div",
         null,
-        h("strong", { text: isError ? "Fehler" : "Hinweis" }),
+        h("strong", { text: isError ? "Error" : "Note" }),
         h("p", { text: message })
       )
     );
     if (retry) {
-      node.append(h("div", { class: "spacer" }));
       node.append(
         h(
           "button",
           { type: "button", class: "btn small", onclick: () => retry() },
           icon("refresh"),
-          h("span", { text: "Erneut versuchen" })
+          h("span", { text: "Try again" })
         )
       );
     }
@@ -1124,27 +1178,27 @@ class BilresaPanel extends HTMLElement {
   _errorCard(message) {
     return h(
       "div",
-      { class: "card pad-lg" },
+      { class: "card flush" },
       h(
         "div",
-        { class: "empty" },
+        { class: "empty-state" },
         icon("alert", "big"),
-        h("h3", { text: "Die Konfiguration konnte nicht geladen werden" }),
+        h("h3", { text: "The configuration could not be loaded" }),
         h("p", { text: message }),
         h(
           "div",
-          { class: "row" },
+          { class: "row wrap" },
           h(
             "button",
             { type: "button", class: "btn primary", onclick: () => this._reload({ manual: true }) },
             icon("refresh"),
-            h("span", { text: "Erneut versuchen" })
+            h("span", { text: "Try again" })
           ),
           h(
             "button",
             { type: "button", class: "btn", onclick: () => this._navigate("/guide") },
             icon("help"),
-            h("span", { text: "Anleitung" })
+            h("span", { text: "Guide" })
           )
         )
       )
@@ -1154,10 +1208,10 @@ class BilresaPanel extends HTMLElement {
   _emptyCard(iconName, headline, text, actions) {
     return h(
       "div",
-      { class: "card pad-lg" },
+      { class: "card flush" },
       h(
         "div",
-        { class: "empty" },
+        { class: "empty-state" },
         icon(iconName, "big"),
         h("h3", { text: headline }),
         h("p", { text }),

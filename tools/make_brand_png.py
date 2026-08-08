@@ -22,14 +22,14 @@ import zlib
 
 # Ausgangskoordinaten sind die viewBox der SVGs (200 x 330).
 VB_W, VB_H = 200.0, 330.0
-BODY = (18.0, 12.0, 164.0, 300.0, 82.0)  # x, y, w, h, radius (voll rund)
-WHEEL = (100.0, 94.0, 75.0)  # cx, cy, r — fast randbuendig im runden Kopf
-LEDS = ((82.0, 196.0), (100.0, 196.0), (118.0, 196.0))
+BODY = (8.0, 12.0, 184.0, 300.0, 92.0)  # x, y, w, h, radius (voll rund)
+WHEEL = (100.0, 104.0, 85.0)  # cx, cy, r — fast randbuendig im runden Kopf
+LEDS = ((82.0, 216.0), (100.0, 216.0), (118.0, 216.0))
 LED_R = 6.0
 
-LIGHT = (0xD6, 0x8C, 0x83)
-BASE = (0xC4, 0x69, 0x5E)
-DARK = (0xA3, 0x4F, 0x45)
+LIGHT = (0xC2, 0x6C, 0x57)
+BASE = (0xA9, 0x4E, 0x41)
+DARK = (0x8B, 0x42, 0x38)
 SEAM = (0x00, 0x00, 0x00, 0.18)
 LED_OFF = (0x2A, 0x2A, 0x2A)
 LED_ON = (0xFF, 0xF3, 0xD0)

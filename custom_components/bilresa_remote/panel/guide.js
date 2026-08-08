@@ -273,6 +273,10 @@ const guideStyles = `
 .doc ul.plain li { margin-bottom: 6px; }
 .doc ul.plain li:last-child { margin-bottom: 0; }
 
+/* Jump link inside running text: inline-block plus padding keeps the tap area
+   comfortable without turning the link into its own block. */
+.doc .link { display: inline-block; padding: 6px 0; line-height: 1.4; }
+
 /* ---------------------------------------------------------------- code --- */
 
 code {
@@ -280,6 +284,7 @@ code {
   font-size: 0.9em;
   padding: 1px 6px;
   border-radius: 6px;
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 9%, transparent);
   overflow-wrap: anywhere;
 }
@@ -300,6 +305,7 @@ pre {
   overflow-x: auto;
   border: var(--bil-border);
   border-radius: var(--bil-radius-md);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 5%, var(--bil-surface));
   font-family: var(--ha-font-family-code, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
   font-size: 12.5px;
@@ -318,6 +324,7 @@ pre .mark {
   border-radius: 4px;
   padding: 1px 4px;
   margin: 0 -4px;
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-accent) 22%, transparent);
 }
 
@@ -352,6 +359,7 @@ th {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--bil-text-dim);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 4%, transparent);
   border-bottom: var(--bil-border);
   white-space: nowrap;
@@ -360,6 +368,7 @@ th {
 td {
   padding: 11px 12px;
   vertical-align: top;
+  border-bottom: 1px solid var(--divider-color, rgba(127,127,127,.3)) 10%, transparent);
   border-bottom: 1px solid color-mix(in srgb, var(--bil-text) 10%, transparent);
 }
 
@@ -408,6 +417,7 @@ td .chip { font-size: 11px; }
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
+  box-shadow: none;
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--bil-surface) 78%, transparent);
 }
 
@@ -434,6 +444,7 @@ td .chip { font-size: 11px; }
   width: 26px;
   height: 26px;
   border-radius: 50%;
+  border: 2px solid var(--divider-color, rgba(127,127,127,.3)) 50%, transparent);
   border: 2px solid color-mix(in srgb, var(--bil-accent) 50%, transparent);
   color: var(--bil-accent);
   font-size: 12px;
@@ -471,6 +482,7 @@ td .chip { font-size: 11px; }
   top: 36px;
   bottom: -18px;
   width: 2px;
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-text) 14%, transparent);
 }
 
@@ -481,6 +493,7 @@ td .chip { font-size: 11px; }
   width: 32px;
   height: 32px;
   border-radius: 50%;
+  border: 2px solid var(--divider-color, rgba(127,127,127,.3)) 45%, transparent);
   border: 2px solid color-mix(in srgb, var(--bil-accent) 45%, transparent);
   background: var(--bil-surface);
   color: var(--bil-accent);
@@ -505,6 +518,7 @@ td .chip { font-size: 11px; }
   margin: 16px 0;
   border-radius: var(--bil-radius-md);
   border-left: 3px solid var(--bil-accent);
+  background: var(--secondary-background-color, rgba(127,127,127,.12));
   background: color-mix(in srgb, var(--bil-accent) 9%, var(--bil-surface));
 }
 
@@ -600,6 +614,7 @@ class BilresaGuide extends HTMLElement {
   set config(config) {
     this._config = config && typeof config === "object" ? config : null;
     this._render();
+    this._applyHash();
   }
 
   get config() {
@@ -608,6 +623,7 @@ class BilresaGuide extends HTMLElement {
 
   connectedCallback() {
     this._render();
+    this._applyHash();
   }
 
   /* -------------------------------------------------------------- data -- */
@@ -648,6 +664,7 @@ class BilresaGuide extends HTMLElement {
       this._sectionButtons(groups),
       this._sectionUnlock(groups),
       this._sectionSkip(),
+      this._sectionModeSource(groups),
       this._sectionMulticlick(groups, topic),
       this._sectionTroubleshooting(topic),
       h("p", {
@@ -664,8 +681,9 @@ class BilresaGuide extends HTMLElement {
       ["1", "What this remote can do", "sec-buttons"],
       ["2", "Unlocking the three channels", "sec-unlock"],
       ["3", "You can skip all of this", "sec-skip"],
-      ["4", "Double and triple click", "sec-multiclick"],
-      ["5", "Troubleshooting", "sec-trouble"],
+      ["4", "Where the mode comes from", "sec-source"],
+      ["5", "Double and triple click", "sec-multiclick"],
+      ["6", "Troubleshooting", "sec-trouble"],
     ];
     return h(
       "header",
@@ -696,6 +714,32 @@ class BilresaGuide extends HTMLElement {
   _scrollTo(id) {
     const target = this.shadowRoot.getElementById(id);
     if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  /**
+   * Jump to the section named in the URL fragment — that is how the remote
+   * editor links into this page. The fragment is consumed afterwards, so
+   * opening the guide again later starts at the top.
+   */
+  _applyHash() {
+    const location = typeof window !== "undefined" ? window.location : null;
+    const id = String((location && location.hash) || "").replace(/^#/, "");
+    if (!id || !this.shadowRoot.getElementById(id)) return;
+    try {
+      window.history.replaceState(null, "", `${location.pathname}${location.search || ""}`);
+    } catch (err) {
+      // A browser that refuses the rewrite still gets the scroll below.
+    }
+    requestAnimationFrame(() => this._scrollTo(id));
+  }
+
+  /** Link that scrolls to another section of this page. */
+  _jump(id, label) {
+    return h(
+      "button",
+      { type: "button", class: "link", onclick: () => this._scrollTo(id) },
+      h("span", { text: label })
+    );
   }
 
   /* ------------------------------------------------ 1 · button reference -- */
@@ -734,7 +778,7 @@ class BilresaGuide extends HTMLElement {
           [
             "Press the lower button",
             h("em", { text: "nothing is sent" }),
-            "switches the internal channel only",
+            "selects the channel inside the remote — nothing else",
             flag(null),
           ],
           [
@@ -745,7 +789,7 @@ class BilresaGuide extends HTMLElement {
           ],
         ]
       ),
-      h("h3", { text: "The three details that surprise everybody" }),
+      h("h3", { text: "The four details that surprise everybody" }),
       h(
         "ul",
         { class: "plain" },
@@ -755,6 +799,16 @@ class BilresaGuide extends HTMLElement {
           strong("A single click alternates between on and off."),
           " That is a counter inside the remote, not the state of anything in your home. " +
             "Both halves map to the same action unless you split them per remote."
+        ),
+        h(
+          "li",
+          {},
+          strong("The lower button is a channel selector, nothing else."),
+          " It picks which of the three channels the wheel sends on and sends nothing over " +
+            "Zigbee itself. It can never be bound to an action, Home Assistant only notices the " +
+            "new channel with the next click or turn, and with the mode source ",
+          strong("Internal"),
+          " it has no effect at all."
         ),
         h(
           "li",
@@ -808,10 +862,12 @@ class BilresaGuide extends HTMLElement {
 
   /** Illustration with numbered markers plus the matching callout list. */
   _figure() {
+    // Coordinates of the shipped illustration (viewBox 200x330): the wheel sits
+    // at cy 104 (31.5%), the LED row at cy 216 (65.45%).
     const markers = [
-      { n: 1, left: "50%", top: "28.5%" },
-      { n: 2, left: "29%", top: "59.4%" },
-      { n: 3, left: "50%", top: "79%" },
+      { n: 1, left: "50%", top: "31.5%" },
+      { n: 2, left: "29%", top: "65.45%" },
+      { n: 3, left: "50%", top: "82%" },
     ];
     const callouts = [
       {
@@ -830,11 +886,12 @@ class BilresaGuide extends HTMLElement {
       },
       {
         n: 3,
-        title: "The lower button",
+        title: "The lower button — the channel switch",
         text:
-          "Switches the channel and sends nothing over Zigbee, so the new channel becomes " +
-          "visible only with the next click or turn. It sits below the LEDs and is not drawn " +
-          "here. The pairing button used in the unlocking steps is a different button.",
+          "Its only job is to move to the next channel. It sends nothing over Zigbee, so the " +
+          "new channel becomes visible only with the next click or turn, and it can never be " +
+          "bound to an action. It sits below the LEDs and is not drawn here. The pairing button " +
+          "used in the unlocking steps is a different button.",
       },
     ];
 
@@ -1085,13 +1142,132 @@ class BilresaGuide extends HTMLElement {
         "p",
         { class: "sub" },
         "The unlock is worth doing only if you want the lower button on the remote itself to ",
-        "switch modes."
+        "switch modes. ",
+        this._jump("sec-source", "What exactly do the three mode sources do?")
       )
     );
     return section;
   }
 
-  /* --------------------------------------------- 4 · multiclick and modes -- */
+  /* ---------------------------------------------------- 4 · mode source -- */
+
+  _sectionModeSource(groups) {
+    const section = h("section", { class: "card pad-lg doc", id: "sec-source" });
+    section.append(
+      h(
+        "div",
+        { class: "doc-head" },
+        h("p", { class: "doc-kicker", text: "Section 4" }),
+        h("h2", { text: "Where the mode comes from" })
+      ),
+      p(
+        "The remote has three internal channels. The lower button switches between them and the ",
+        "LED shows the active one — all of that happens inside the remote and never touches ",
+        "Zigbee. The only open question is how Home Assistant learns which channel is on, and ",
+        "that is what the ",
+        strong("mode source"),
+        " of a remote answers. It is one setting with three answers."
+      ),
+      table(
+        ["Mode source", "How Home Assistant finds the mode", "Who it is for"],
+        [
+          [
+            strong("Device"),
+            h(
+              "span",
+              {},
+              "Out of the radio traffic. A single click and the wheel are addressed to a group id (",
+              code(String(groups[0])),
+              ", ",
+              code(String(groups[1])),
+              ", ",
+              code(String(groups[2])),
+              ") and Zigbee2MQTT reports it as ",
+              code("action_group"),
+              " — that id names the channel."
+            ),
+            "Remotes whose three channels were unlocked with Touchlink.",
+          ],
+          [
+            strong("Internal"),
+            "Not from the remote at all. Home Assistant keeps its own counter and advances it " +
+              "whenever the action you picked is triggered — a triple click by default.",
+            "Everyone who did not run the Touchlink procedure. The lower button stays without " +
+              "effect here.",
+          ],
+          [
+            h("span", {}, strong("Hybrid"), " (default)"),
+            "Starts out like Internal and switches over to Device on its own, the first time a " +
+              "group id other than the first one shows up.",
+            "Everyone who is not sure, and anyone planning to unlock the channels later.",
+          ],
+        ]
+      ),
+      h("h3", { text: "Which one do I need?" }),
+      h(
+        "ul",
+        { class: "plain" },
+        h(
+          "li",
+          {},
+          strong("You worked through section 2 and the LEDs follow the lower button: "),
+          "take ",
+          strong("Device"),
+          ". Nothing else has to be configured — the channel arrives with every press.",
+          " ",
+          this._jump("sec-unlock", "How do I unlock the channels?")
+        ),
+        h(
+          "li",
+          {},
+          strong("You did not, and you do not want to: "),
+          "take ",
+          strong("Internal"),
+          ". Pick which action advances the mode; that one action is then spent on switching."
+        ),
+        h(
+          "li",
+          {},
+          strong("You are not sure: "),
+          "leave it on ",
+          strong("Hybrid"),
+          ". It behaves like Internal today and follows the hardware the moment the channels " +
+            "start working, without you changing anything."
+        )
+      ),
+      box(
+        "accent",
+        "info",
+        "The panel shows what is actually in use",
+        p(
+          "Hybrid is the setting, but not necessarily what is running. Once it has promoted ",
+          "itself, the remote's page says ",
+          strong("Currently using: Device"),
+          " — the setting stays on Hybrid, the mode comes from the hardware. The promotion is ",
+          "permanent for that remote."
+        )
+      ),
+      box(
+        "warn",
+        "alert",
+        "With Internal the lower button does nothing",
+        p(
+          "The button still switches the channel inside the remote, and the LED still moves, but ",
+          "Home Assistant ignores the group ids and counts on its own. The two can then disagree: ",
+          "what counts for your actions is the mode shown in the panel, not the LED on the remote."
+        )
+      ),
+      h(
+        "p",
+        { class: "sub" },
+        "The group ids only matter for Device and Hybrid. They are a per-remote setting because ",
+        "the ids are fixed in the hardware — you normally never touch them."
+      )
+    );
+    return section;
+  }
+
+  /* --------------------------------------------- 5 · multiclick and modes -- */
 
   _sectionMulticlick(groups, topic) {
     const section = h("section", { class: "card pad-lg doc", id: "sec-multiclick" });
@@ -1099,7 +1275,7 @@ class BilresaGuide extends HTMLElement {
       h(
         "div",
         { class: "doc-head" },
-        h("p", { class: "doc-kicker", text: "Section 4" }),
+        h("p", { class: "doc-kicker", text: "Section 5" }),
         h("h2", { text: "Why double and triple click ignore the channel" })
       ),
       p(
@@ -1200,7 +1376,7 @@ class BilresaGuide extends HTMLElement {
     return section;
   }
 
-  /* ----------------------------------------------------- 5 · troubleshooting -- */
+  /* ----------------------------------------------------- 6 · troubleshooting -- */
 
   _sectionTroubleshooting(topic) {
     const entries = [
@@ -1222,7 +1398,18 @@ class BilresaGuide extends HTMLElement {
           "The channels are not unlocked, so every press arrives on the first group and the ",
           "lower button stays silent. Either work through section 2, or set the mode source to ",
           strong("Internal"),
-          " and let a press cycle the mode."
+          " and let a press cycle the mode — section 4 compares the three settings."
+        ),
+      },
+      {
+        symptom: "The LED on the remote and the mode in Home Assistant disagree",
+        body: p(
+          "That is the normal picture with the mode source ",
+          strong("Internal"),
+          ": the lower button still moves the LED, but Home Assistant counts on its own and " +
+            "ignores the hardware. Either switch that remote to ",
+          strong("Device"),
+          " once the channels are unlocked, or go by the mode shown in the panel."
         ),
       },
       {
@@ -1251,7 +1438,7 @@ class BilresaGuide extends HTMLElement {
       h(
         "div",
         { class: "doc-head" },
-        h("p", { class: "doc-kicker", text: "Section 5" }),
+        h("p", { class: "doc-kicker", text: "Section 6" }),
         h("h2", { text: "Troubleshooting" })
       ),
       h(

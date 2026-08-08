@@ -19,6 +19,7 @@ Two details are worth spelling out:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Final
 
@@ -35,8 +36,15 @@ _LOGGER = logging.getLogger(__name__)
 #: Sidebar route. ``/bilresa`` is short on purpose -- it is what users bookmark.
 PANEL_URL_PATH: Final = "bilresa"
 
-#: URL prefix the panel directory is served under.
+#: URL prefix the panel directory is served under. The integration version is
+#: appended as a path segment, not as a query string: the entry point pulls in
+#: five sibling modules with plain relative imports, and only a versioned *path*
+#: makes those inherit the cache buster too. With ``?v=`` on the entry point
+#: alone, a browser could pair a new bilresa-panel.js with a stale styles.js.
 PANEL_STATIC_URL: Final = f"/{DOMAIN}/panel"
+
+#: Characters kept when a version string becomes part of a URL.
+_SAFE_VERSION = re.compile(r"[^A-Za-z0-9._-]")
 
 #: Directory holding the panel sources.
 PANEL_DIR: Final = Path(__file__).parent / "panel"
@@ -70,12 +78,13 @@ async def async_register_panel(hass: HomeAssistant) -> None:
     Safe to call more than once: the static path is registered at most once per
     process and the sidebar entry is replaced rather than duplicated.
     """
-    if not await _async_register_static(hass):
+    version = _SAFE_VERSION.sub("-", await _async_version(hass)) or "dev"
+
+    if not await _async_register_static(hass, version):
         return
 
-    version = await _async_version(hass)
     title = await _async_sidebar_title(hass)
-    module_url = f"{PANEL_STATIC_URL}/{PANEL_ENTRYPOINT}?v={version}"
+    module_url = f"{PANEL_STATIC_URL}/{version}/{PANEL_ENTRYPOINT}"
 
     # Registering an existing panel raises; removing first keeps the call
     # idempotent and picks up a changed title or version on a reload.
@@ -132,9 +141,10 @@ def _async_remove_panel(hass: HomeAssistant) -> None:
         _LOGGER.debug("Could not remove the BILRESA panel", exc_info=True)
 
 
-async def _async_register_static(hass: HomeAssistant) -> bool:
-    """Serve :data:`PANEL_DIR` under :data:`PANEL_STATIC_URL` exactly once."""
-    if hass.data.get(_DATA_STATIC_REGISTERED):
+async def _async_register_static(hass: HomeAssistant, version: str) -> bool:
+    """Serve :data:`PANEL_DIR` under a versioned URL exactly once."""
+    url = f"{PANEL_STATIC_URL}/{version}"
+    if hass.data.get(_DATA_STATIC_REGISTERED) == url:
         return True
 
     if not await hass.async_add_executor_job(PANEL_DIR.is_dir):
@@ -145,17 +155,15 @@ async def _async_register_static(hass: HomeAssistant) -> bool:
         return False
 
     try:
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(PANEL_STATIC_URL, str(PANEL_DIR), False)]
-        )
+        await hass.http.async_register_static_paths([StaticPathConfig(url, str(PANEL_DIR), False)])
     except RuntimeError:
         # Already served, e.g. after the integration was reloaded from disk.
-        _LOGGER.debug("%s is already served", PANEL_STATIC_URL)
+        _LOGGER.debug("%s is already served", url)
     except Exception:
         _LOGGER.exception("Could not serve the panel from %s", PANEL_DIR)
         return False
 
-    hass.data[_DATA_STATIC_REGISTERED] = True
+    hass.data[_DATA_STATIC_REGISTERED] = url
     return True
 
 

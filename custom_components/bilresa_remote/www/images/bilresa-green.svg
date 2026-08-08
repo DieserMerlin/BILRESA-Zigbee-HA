@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 330"
-     role="img" aria-label="IKEA BILRESA remote, Green" class="bilresa bilresa--green">
-  <title>IKEA BILRESA — Green</title>
+     role="img" aria-label="IKEA BILRESA remote, Teal green" class="bilresa bilresa--green">
+  <title>IKEA BILRESA — Teal green</title>
   <defs>
     <linearGradient id="body-green" x1="0.25" y1="0" x2="0.75" y2="1">
-      <stop offset="0%" stop-color="#6B9B71"/>
-      <stop offset="55%" stop-color="#4C7A52"/>
-      <stop offset="100%" stop-color="#365939"/>
+      <stop offset="0%" stop-color="#789F90"/>
+      <stop offset="55%" stop-color="#547D70"/>
+      <stop offset="100%" stop-color="#496457"/>
     </linearGradient>
     <filter id="shadow-green" x="-30%" y="-20%" width="160%" height="150%">
       <feDropShadow dx="0" dy="5" stdDeviation="7" flood-color="#000" flood-opacity="0.28"/>
@@ -26,27 +26,27 @@
 
   <!-- Gehäuse -->
   <g filter="url(#shadow-green)">
-    <rect x="18" y="12" width="164" height="300" rx="82" fill="url(#body-green)"/>
-    <rect x="18" y="12" width="164" height="300" rx="82" fill="none"
+    <rect x="8.0" y="12.0" width="184.0" height="300.0" rx="92.0" fill="url(#body-green)"/>
+    <rect x="8.0" y="12.0" width="184.0" height="300.0" rx="92.0" fill="none"
           stroke="#000" stroke-opacity="0.16" stroke-width="1.5"/>
   </g>
 
   <!-- Scrollrad: einfarbig, ohne Glanz. Nur eine feine Fuge zeigt, dass es ein
        eigenes Bauteil ist. -->
   <g>
-    <circle cx="100" cy="94" r="75" fill="#4C7A52"/>
-    <circle cx="100" cy="94" r="75" fill="none" stroke="#000"
+    <circle cx="100.0" cy="104.0" r="85.0" fill="#547D70"/>
+    <circle cx="100.0" cy="104.0" r="85.0" fill="none" stroke="#000"
             stroke-opacity="0.18" stroke-width="2"/>
   </g>
 
   <!-- Kanal-LEDs. Die untere Taste ist von aussen nicht sichtbar und daher
        bewusst nicht dargestellt. -->
   <g>
-    <circle id="led-1" class="led" cx="82"  cy="196" r="6"/>
-    <circle id="led-2" class="led" cx="100" cy="196" r="6"/>
-    <circle id="led-3" class="led" cx="118" cy="196" r="6"/>
-    <circle class="led-ring" cx="82"  cy="196" r="8"/>
-    <circle class="led-ring" cx="100" cy="196" r="8"/>
-    <circle class="led-ring" cx="118" cy="196" r="8"/>
+    <circle id="led-1" class="led" cx="82.0" cy="216.0" r="6.0"/>
+    <circle id="led-2" class="led" cx="100.0" cy="216.0" r="6.0"/>
+    <circle id="led-3" class="led" cx="118.0" cy="216.0" r="6.0"/>
+    <circle class="led-ring" cx="82.0" cy="216.0" r="8"/>
+    <circle class="led-ring" cx="100.0" cy="216.0" r="8"/>
+    <circle class="led-ring" cx="118.0" cy="216.0" r="8"/>
   </g>
 </svg>

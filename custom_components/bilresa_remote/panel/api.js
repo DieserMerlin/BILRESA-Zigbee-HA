@@ -34,32 +34,38 @@ const CREATE_FIELDS = Object.freeze([
   "modeless_multiclick",
 ]);
 
+/**
+ * Wording note: every string in this file reaches the user through the panel,
+ * which is English throughout — same as the guide, the config flow and
+ * `translations/en.json`. Keep them English so a toast raised here never lands
+ * in a card written by `remote-editor.js` in a different language.
+ */
 export const ACTION_LABELS = Object.freeze({
-  click: "Klick",
-  click_on: "Klick (Ein)",
-  click_off: "Klick (Aus)",
-  double: "Doppelklick",
-  triple: "Dreifachklick",
-  wheel: "Rad",
+  click: "Single click",
+  click_on: "Single click (on)",
+  click_off: "Single click (off)",
+  double: "Double click",
+  triple: "Triple click",
+  wheel: "Wheel",
 });
 
 export const MODE_SOURCE_LABELS = Object.freeze({
   hybrid: "Hybrid",
-  device: "Gerät",
-  internal: "Intern",
+  device: "Device",
+  internal: "Internal",
 });
 
 const ERROR_MESSAGES = Object.freeze({
-  not_found: "Diese Fernbedienung existiert nicht mehr.",
-  invalid_format: "Die Anfrage wurde abgelehnt: ungültiges oder unbekanntes Feld.",
-  invalid_sequence: "Die Aktionsfolge ist ungültig und wurde nicht gespeichert.",
-  z2m_unavailable: "Zigbee2MQTT hat nicht rechtzeitig geantwortet.",
-  already_configured: "Diese Fernbedienung ist bereits eingerichtet.",
-  not_loaded: "Die BILRESA-Integration ist nicht eingerichtet oder wurde noch nicht geladen.",
-  unknown_error: "Unerwarteter Fehler in der Integration.",
-  not_connected: "Keine Verbindung zu Home Assistant.",
-  unknown_command: "Der Befehl ist unbekannt — läuft eine ältere Version der Integration?",
-  unknown: "Unerwarteter Fehler.",
+  not_found: "This remote does not exist any more.",
+  invalid_format: "The request was rejected: invalid or unknown field.",
+  invalid_sequence: "The action sequence is invalid and was not saved.",
+  z2m_unavailable: "Zigbee2MQTT did not answer in time.",
+  already_configured: "This remote is already set up.",
+  not_loaded: "The BILRESA integration is not set up yet, or has not finished loading.",
+  unknown_error: "Unexpected error inside the integration.",
+  not_connected: "No connection to Home Assistant.",
+  unknown_command: "Unknown command — is an older version of the integration running?",
+  unknown: "Unexpected error.",
 });
 
 /** Error with the contract's error code attached. */
@@ -110,7 +116,7 @@ async function call(hass, message) {
 
 function requireId(subentryId) {
   if (typeof subentryId !== "string" || !subentryId) {
-    throw new BilresaError("invalid_format", "Es wurde keine subentry_id übergeben.");
+    throw new BilresaError("invalid_format", "No subentry_id was passed.");
   }
   return subentryId;
 }
@@ -126,10 +132,10 @@ function bindingPayload(subentryId, modeKey, action, extra) {
       : { subentry_id: subentryId, mode_key: modeKey, action, ...(extra || {}) };
   requireId(base.subentry_id);
   if (typeof base.mode_key !== "string" || !base.mode_key) {
-    throw new BilresaError("invalid_format", "mode_key fehlt.");
+    throw new BilresaError("invalid_format", "mode_key is missing.");
   }
   if (typeof base.action !== "string" || !base.action) {
-    throw new BilresaError("invalid_format", "action fehlt.");
+    throw new BilresaError("invalid_format", "action is missing.");
   }
   return base;
 }
@@ -155,7 +161,7 @@ export function createRemote(hass, data) {
     if (value !== undefined && value !== null && value !== "") message[field] = value;
   }
   if (typeof message.ieee !== "string" || !message.ieee) {
-    throw new BilresaError("invalid_format", "Es wurde keine IEEE-Adresse übergeben.");
+    throw new BilresaError("invalid_format", "No IEEE address was passed.");
   }
   return call(hass, message);
 }
@@ -164,7 +170,7 @@ export function createRemote(hass, data) {
 export function updateRemote(hass, subentryId, changes) {
   requireId(subentryId);
   if (!changes || typeof changes !== "object" || Array.isArray(changes)) {
-    throw new BilresaError("invalid_format", "changes muss ein Objekt sein.");
+    throw new BilresaError("invalid_format", "changes has to be an object.");
   }
   if (Object.keys(changes).length === 0) {
     return Promise.resolve({ success: true });
@@ -233,7 +239,7 @@ export function testBinding(hass, subentryId, modeKey, action) {
 export async function subscribeEvents(hass, callback) {
   requireConnection(hass);
   if (typeof callback !== "function") {
-    throw new BilresaError("invalid_format", "subscribeEvents braucht eine Callback-Funktion.");
+    throw new BilresaError("invalid_format", "subscribeEvents needs a callback function.");
   }
   try {
     return await hass.connection.subscribeMessage(
