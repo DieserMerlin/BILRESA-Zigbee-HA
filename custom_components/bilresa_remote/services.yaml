@@ -3,8 +3,6 @@
 
 set_mode:
   target:
-    device:
-      integration: bilresa_remote
     entity:
       integration: bilresa_remote
       domain: select
@@ -17,8 +15,6 @@ set_mode:
 
 next_mode:
   target:
-    device:
-      integration: bilresa_remote
     entity:
       integration: bilresa_remote
       domain: select

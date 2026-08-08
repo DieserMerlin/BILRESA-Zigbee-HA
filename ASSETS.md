@@ -48,3 +48,18 @@ connected to IKEA or Inter IKEA Systems B.V. The names are used purely
 descriptively, to identify the hardware this integration works with, which is
 what nominative use permits. No IKEA logo, wordmark styling or brand imagery is
 used anywhere in this repository, including in the integration's own icon.
+
+## Integration icons
+
+`icon.png`, `icon@2x.png`, `dark_icon.png` and `logo.png` in
+`custom_components/bilresa_remote/` are rendered from the same geometry as the
+SVGs by `tools/make_brand_png.py`, using only the Python standard library. Home
+Assistant serves these directly from the integration folder, so no pull request
+against the `home-assistant/brands` repository is needed.
+
+Regenerate them with:
+
+```bash
+python3 tools/make_remote_svg.py    # SVG illustrations
+python3 tools/make_brand_png.py     # PNG icons
+```

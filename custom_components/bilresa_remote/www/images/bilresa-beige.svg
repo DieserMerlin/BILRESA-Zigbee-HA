@@ -26,27 +26,27 @@
 
   <!-- Gehäuse -->
   <g filter="url(#shadow-beige)">
-    <rect x="18" y="12" width="164" height="300" rx="72" fill="url(#body-beige)"/>
-    <rect x="18" y="12" width="164" height="300" rx="72" fill="none"
+    <rect x="18" y="12" width="164" height="300" rx="82" fill="url(#body-beige)"/>
+    <rect x="18" y="12" width="164" height="300" rx="82" fill="none"
           stroke="#000" stroke-opacity="0.16" stroke-width="1.5"/>
   </g>
 
   <!-- Scrollrad: einfarbig, ohne Glanz. Nur eine feine Fuge zeigt, dass es ein
        eigenes Bauteil ist. -->
   <g>
-    <circle cx="100" cy="112" r="55" fill="#D9C7AC"/>
-    <circle cx="100" cy="112" r="55" fill="none" stroke="#000"
+    <circle cx="100" cy="94" r="75" fill="#D9C7AC"/>
+    <circle cx="100" cy="94" r="75" fill="none" stroke="#000"
             stroke-opacity="0.18" stroke-width="2"/>
   </g>
 
   <!-- Kanal-LEDs. Die untere Taste ist von aussen nicht sichtbar und daher
        bewusst nicht dargestellt. -->
   <g>
-    <circle id="led-1" class="led" cx="72"  cy="232" r="6"/>
-    <circle id="led-2" class="led" cx="100" cy="232" r="6"/>
-    <circle id="led-3" class="led" cx="128" cy="232" r="6"/>
-    <circle class="led-ring" cx="72"  cy="232" r="8"/>
-    <circle class="led-ring" cx="100" cy="232" r="8"/>
-    <circle class="led-ring" cx="128" cy="232" r="8"/>
+    <circle id="led-1" class="led" cx="82"  cy="196" r="6"/>
+    <circle id="led-2" class="led" cx="100" cy="196" r="6"/>
+    <circle id="led-3" class="led" cx="118" cy="196" r="6"/>
+    <circle class="led-ring" cx="82"  cy="196" r="8"/>
+    <circle class="led-ring" cx="100" cy="196" r="8"/>
+    <circle class="led-ring" cx="118" cy="196" r="8"/>
   </g>
 </svg>
