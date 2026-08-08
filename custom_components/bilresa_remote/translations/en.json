@@ -210,7 +210,6 @@
       "title": "BILRESA {name}: device channels detected"
     },
     "channels_locked": {
-      "description": "This remote is set to the device mode source, but in {days} days it has only ever sent on channel 1. That usually means the Touchlink unlock has not been done.\n\nEither work through the setup guide, or switch the mode source of the remote to Internal - then the integration switches modes on its own and no Touchlink is needed.",
       "fix_flow": {
         "step": {
           "confirm": {
@@ -220,7 +219,7 @@
             "data_description": {
               "choice": "Switching to Internal is the option that works without any Touchlink unlock."
             },
-            "description": "Follow the setup guide to unlock the channels, or switch the mode source of this remote to Internal. Confirm to dismiss this message.",
+            "description": "This remote is set to the device mode source, but in {days} days it has only ever sent on channel 1. That usually means the Touchlink unlock has not been done.\n\nEither work through the setup guide, or switch the mode source of the remote to Internal - then the integration switches modes on its own and no Touchlink is needed.\n\nFollow the setup guide to unlock the channels, or switch the mode source of this remote to Internal. Confirm to dismiss this message.",
             "title": "Device channels are not unlocked"
           }
         }

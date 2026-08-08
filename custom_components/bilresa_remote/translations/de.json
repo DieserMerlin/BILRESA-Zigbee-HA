@@ -210,7 +210,6 @@
       "title": "BILRESA {name}: Gerätekanäle erkannt"
     },
     "channels_locked": {
-      "description": "Diese Fernbedienung steht auf der Modusquelle Gerätekanäle, hat aber in {days} Tagen ausschließlich auf Kanal 1 gesendet. Das bedeutet meistens, dass die Touchlink-Freischaltung fehlt.\n\nArbeite entweder die Einrichtungsanleitung durch, oder stell die Modusquelle der Fernbedienung auf Intern - dann schaltet die Integration die Modi selbst weiter und Touchlink wird nicht gebraucht.",
       "fix_flow": {
         "step": {
           "confirm": {
@@ -220,7 +219,7 @@
             "data_description": {
               "choice": "Der Wechsel auf Intern ist die Variante, die ganz ohne Touchlink-Freischaltung funktioniert."
             },
-            "description": "Folge der Einrichtungsanleitung, um die Kanäle freizuschalten, oder stell die Modusquelle dieser Fernbedienung auf Intern. Bestätige, um diese Meldung auszublenden.",
+            "description": "Diese Fernbedienung steht auf der Modusquelle Gerätekanäle, hat aber in {days} Tagen ausschließlich auf Kanal 1 gesendet. Das bedeutet meistens, dass die Touchlink-Freischaltung fehlt.\n\nArbeite entweder die Einrichtungsanleitung durch, oder stell die Modusquelle der Fernbedienung auf Intern - dann schaltet die Integration die Modi selbst weiter und Touchlink wird nicht gebraucht.\n\nFolge der Einrichtungsanleitung, um die Kanäle freizuschalten, oder stell die Modusquelle dieser Fernbedienung auf Intern. Bestätige, um diese Meldung auszublenden.",
             "title": "Gerätekanäle sind nicht freigeschaltet"
           }
         }

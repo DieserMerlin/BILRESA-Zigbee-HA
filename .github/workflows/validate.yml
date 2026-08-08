@@ -36,3 +36,8 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # The integration ships its own icon.png / dark_icon.png / logo.png,
+          # which Home Assistant serves straight from the integration folder
+          # (supported since 2024.11). The HACS check still only looks at the
+          # home-assistant/brands repository; a pull request there is pending.
+          ignore: brands
