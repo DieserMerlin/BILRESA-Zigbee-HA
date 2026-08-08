@@ -105,8 +105,8 @@ def render(size: int, *, dark_theme: bool = False) -> bytes:
                     if led > 0:
                         _blend(pixel, led_on if index == 0 else LED_OFF, led)
 
-            row += bytes(int(round(min(max(c, 0.0), 255.0))) for c in pixel[:3])
-            row += bytes((int(round(min(max(pixel[3], 0.0), 1.0) * 255)),))
+            row += bytes(round(min(max(c, 0.0), 255.0)) for c in pixel[:3])
+            row += bytes((round(min(max(pixel[3], 0.0), 1.0) * 255),))
         rows += row
     return bytes(rows)
 
