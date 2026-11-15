@@ -180,7 +180,7 @@ class RemoteConfig:
     @property
     def topic(self) -> str:
         """Return the MQTT topic of this remote."""
-        return f"{self.base_topic}/{self.remote_id}"
+        return f"{self.base_topic}/{self.name}"
 
 
 # --------------------------------------------------------------------------- #
